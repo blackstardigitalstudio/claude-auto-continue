@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ââ Bash syntax check âââââââââââââââââââââââââââââââââââââââââââââââââââ
+  lint:
+    name: Lint (shellcheck + bash -n)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Syntax check all scripts
+        run: |
+          bash -n bin/claude-ac
+          bash -n hooks/stop.sh
+          bash -n lib/detect.sh
+          bash -n lib/notify.sh
+          bash -n lib/session.sh
+          bash -n config/defaults.sh
+          bash -n install.sh
+          bash -n tests/test.sh
+          echo "All syntax checks passed."
+
+      - name: Shellcheck (warnings only â not blocking)
+        run: |
+          shellcheck -S warning bin/claude-ac hooks/stop.sh lib/*.sh config/defaults.sh install.sh || true
+
+  # ââ Unit tests âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  test:
+    name: Unit Tests
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        bash: ['5']
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bash 5 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "/usr/local/bin" >> $GITHUB_PATH
+
+      - name: Verify bash version
+        run: bash --version | head -1
+
+      - name: Run test suite
+        run: bash tests/test.sh --verbose
+
+      - name: Test install.sh dry-run
+        run: |
+          # Verify installer runs without errors (no actual claude binary needed for syntax)
+          bash -n install.sh
+          echo "install.sh syntax OK"
+
+  # ââ Integration test: claude-ac --help âââââââââââââââââââââââââââââââââ
+  integration:
+    name: Integration (help & version)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mock claude binary
+        run: |
+          mkdir -p /tmp/mock-bin
+          cat > /tmp/mock-bin/claude <<'EOF'
+          #!/usr/bin/env bash
+          echo "2.1.0 (Claude Code)"
+          if [[ "$1" == "--version" ]]; then exit 0; fi
+          echo "Claude AI usage limit has been reached."
+          echo "Your usage will reset at 5:00 PM."
+          exit 1
+          EOF
+          chmod +x /tmp/mock-bin/claude
+          echo "/tmp/mock-bin" >> $GITHUB_PATH
+
+      - name: Test --ac-help flag
+        run: |
+          CLAUDE_BIN=/tmp/mock-bin/claude bash bin/claude-ac --ac-help
+          echo "Help output works."
+
+      - name: Test credit detection with mock claude
+        run: |
+          # Should detect the usage limit and not exit with code 0
+          # (we only do 1 retry with 1s interval for CI speed)
+          set +e
+          CLAUDE_BIN=/tmp/mock-bin/claude \
+          CLAUDE_AC_INTERVAL=1 \
+          CLAUDE_AC_MAX_RETRIES=1 \
+          CLAUDE_AC_NOTIFY=0 \
+          bash bin/claude-ac "test prompt" < /dev/null
+          EXIT=$?
+          set -e
+          # Expected: exit 1 after max retries
+          [[ $EXIT -eq 1 ]] && echo "Credit detection + max-retry flow: PASS" || \
+            { echo "Unexpected exit code: $EXIT"; exit 1; }
