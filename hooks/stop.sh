@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# hooks/stop.sh â Claude Code Stop Hook
+# hooks/stop.sh — Claude Code Stop Hook (v1.1: anti-loop + lock)
 # =============================================================================
-# Registered in ~/.claude/settings.json under hooks.Stop.
-# Fires every time Claude Code stops a session. Reads the hook context
-# from stdin (JSON), checks the transcript for credit exhaustion, and if
-# detected spawns a background daemon that will run `claude --continue`
-# once credits reset.
+# Registrato in ~/.claude/settings.json sotto hooks.Stop.
+# Scatta a ogni stop di sessione: legge il contesto JSON da stdin, controlla
+# il transcript per l'esaurimento crediti e, se rilevato, avvia un daemon in
+# background che eseguirà `claude --continue` al reset.
 #
-# Install via: claude-ac install-hook
-# Manual install: add to ~/.claude/settings.json (see README)
+# Fix v1.1:
+#  - Rispetta stop_hook_active: se l'hook è già attivo, esce subito (no loop).
+#  - Lockfile: evita l'accumulo di daemon sovrapposti.
+#  - Output JSON sempre valido.
 # =============================================================================
 
 set -euo pipefail
@@ -23,19 +24,22 @@ source "$LIB_DIR/notify.sh"
 source "$LIB_DIR/session.sh"
 source "$CONFIG_DIR/defaults.sh"
 
+CACHE_DIR="${HOME}/.cache/claude-ac"
+LOCK_FILE="$CACHE_DIR/daemon.lock"
+mkdir -p "$CACHE_DIR"
+
+log_hook() { echo "[HOOK $(date '+%H:%M:%S')] $1" >> "$CACHE_DIR/hook.log"; }
+
+emit_and_exit() { echo '{"continue": false, "suppressOutput": false}'; exit 0; }
+
 # ---------------------------------------------------------------------------
-# Read hook context from stdin (Claude Code passes JSON)
+# Leggi il contesto dell'hook da stdin (JSON da Claude Code)
 # ---------------------------------------------------------------------------
 HOOK_INPUT=""
-if read -t 2 -r HOOK_INPUT 2>/dev/null; then
-    :
-fi
+read -t 2 -r HOOK_INPUT 2>/dev/null || true
 
-# Parse fields from JSON (minimal parser, no jq dependency)
 parse_json_field() {
-    local json="$1"
-    local field="$2"
-    echo "$json" | grep -oP "\"${field}\":\s*\K\"[^\"]+\"" | tr -d '"' | head -1
+    grep -oP "\"$2\":\s*\K\"[^\"]+\"" <<<"$1" 2>/dev/null | tr -d '"' | head -1
 }
 
 TRANSCRIPT_PATH=$(parse_json_field "$HOOK_INPUT" "transcript_path")
@@ -43,71 +47,67 @@ SESSION_ID=$(parse_json_field "$HOOK_INPUT" "session_id")
 SESSION_CWD=$(parse_json_field "$HOOK_INPUT" "cwd")
 STOP_HOOK_ACTIVE=$(parse_json_field "$HOOK_INPUT" "stop_hook_active")
 
-log_hook() {
-    local msg="$1"
-    local log_dir="${HOME}/.cache/claude-ac"
-    mkdir -p "$log_dir"
-    echo "[HOOK $(date '+%H:%M:%S')] $msg" >> "$log_dir/hook.log"
-}
+# ---------------------------------------------------------------------------
+# ANTI-LOOP: se siamo già dentro un ciclo di Stop avviato dall'hook, esci.
+# Claude Code fornisce stop_hook_active proprio per questo.
+# ---------------------------------------------------------------------------
+if [[ "$STOP_HOOK_ACTIVE" == "true" ]]; then
+    log_hook "stop_hook_active=true → esco per evitare loop."
+    emit_and_exit
+fi
 
-log_hook "Stop hook fired. Session: $SESSION_ID | CWD: $SESSION_CWD"
+log_hook "Stop hook avviato. Session: ${SESSION_ID:-?} | CWD: ${SESSION_CWD:-?}"
 
 # ---------------------------------------------------------------------------
-# Check if the transcript shows credit exhaustion
+# LOCK: se un daemon è già in attesa (lock fresco), non spawnarne un altro.
+# ---------------------------------------------------------------------------
+if [[ -f "$LOCK_FILE" ]]; then
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+        log_hook "Daemon già attivo (PID $lock_pid) → non ne avvio un altro."
+        emit_and_exit
+    fi
+    rm -f "$LOCK_FILE"  # lock stantio
+fi
+
+# ---------------------------------------------------------------------------
+# Rileva esaurimento crediti dal transcript
 # ---------------------------------------------------------------------------
 CREDIT_DETECTED=0
-
 if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
-    log_hook "Checking transcript: $TRANSCRIPT_PATH"
-    if should_retry "$TRANSCRIPT_PATH" 1; then
-        CREDIT_DETECTED=1
-        log_hook "Credit exhaustion detected in transcript."
-    fi
+    should_retry "$TRANSCRIPT_PATH" 1 && CREDIT_DETECTED=1
+fi
+
+if [[ "$CREDIT_DETECTED" -ne 1 ]]; then
+    log_hook "Nessun esaurimento crediti rilevato. Stop normale."
+    emit_and_exit
 fi
 
 # ---------------------------------------------------------------------------
-# If credits exhausted: spawn background daemon and signal to not block
+# Crediti esauriti: calcola attesa e avvia il daemon
 # ---------------------------------------------------------------------------
-if [[ "$CREDIT_DETECTED" -eq 1 ]]; then
-    RETRY_INTERVAL="${CLAUDE_AC_INTERVAL:-$DEFAULT_RETRY_INTERVAL}"
-    MAX_RETRIES="${CLAUDE_AC_MAX_RETRIES:-$DEFAULT_MAX_RETRIES}"
+RETRY_INTERVAL="${CLAUDE_AC_INTERVAL:-$DEFAULT_RETRY_INTERVAL}"
+WAIT_SECS="$RETRY_INTERVAL"
+[[ -f "$TRANSCRIPT_PATH" ]] && WAIT_SECS=$(extract_wait_time "$TRANSCRIPT_PATH" "$RETRY_INTERVAL")
 
-    # Calculate wait time
-    WAIT_SECS="$RETRY_INTERVAL"
-    if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
-        WAIT_SECS=$(extract_wait_time "$TRANSCRIPT_PATH" "$RETRY_INTERVAL")
-    fi
+RESUME_AT=$(date -d "+${WAIT_SECS} seconds" '+%H:%M:%S' 2>/dev/null \
+         || date -v+${WAIT_SECS}S '+%H:%M:%S' 2>/dev/null || echo "presto")
 
-    RESUME_AT=$(date -d "+${WAIT_SECS} seconds" '+%H:%M:%S' 2>/dev/null \
-             || date -v+${WAIT_SECS}S '+%H:%M:%S' 2>/dev/null \
-             || echo "soon")
+log_hook "Avvio daemon. Attesa: ${WAIT_SECS}s. Ripresa: $RESUME_AT"
+notify_send "Claude Auto-Continue" "Limite rilevato. Riprendo alle $RESUME_AT." "info"
+save_session_state "${SESSION_CWD:-$PWD}" 0 "${SESSION_ID:-}"
 
-    log_hook "Spawning background daemon. Wait: ${WAIT_SECS}s. Resume at: $RESUME_AT"
+# Daemon in background, scollegato, protetto da lock.
+(
+    echo $$ > "$LOCK_FILE"
+    trap 'rm -f "$LOCK_FILE"' EXIT
+    sleep "$WAIT_SECS"
+    cd "${SESSION_CWD:-$PWD}" || exit 1
+    log_hook "Daemon attivo. Eseguo: claude --continue"
+    notify_send "Claude Auto-Continue" "Riprendo la sessione ora..." "info"
+    exec "${CLAUDE_AC_BIN:-claude-ac}" --continue
+) </dev/null >/dev/null 2>&1 &
+disown
+log_hook "Daemon PID $! avviato (lock: $LOCK_FILE)."
 
-    notify_send "Claude Auto-Continue" \
-        "Usage limit detected. Will resume at $RESUME_AT." \
-        "info"
-
-    # Save state for the daemon
-    save_session_state "${SESSION_CWD:-$PWD}" 0 "$SESSION_ID"
-
-    # Spawn the daemon in background, detached from this process
-    # The daemon will sleep then run `claude --continue` in the correct dir
-    (
-        sleep "$WAIT_SECS"
-        cd "${SESSION_CWD:-$PWD}"
-        log_hook "Daemon woke up. Running: claude --continue"
-        notify_send "Claude Auto-Continue" "Resuming your session now..." "info"
-        # Run with auto-continue enabled again in case of further credit limits
-        exec "${CLAUDE_AC_BIN:-claude-ac}" --continue
-    ) </dev/null >/dev/null 2>&1 &
-    disown
-
-    log_hook "Daemon PID: $! spawned."
-fi
-
-# ---------------------------------------------------------------------------
-# Always emit a valid JSON response so Claude Code doesn't error
-# The hook MUST output valid JSON â we never block the stop, just observe it.
-# ---------------------------------------------------------------------------
-echo '{"continue": false, "suppressOutput": false}'
+emit_and_exit
