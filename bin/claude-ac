@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# claude-ac â Auto-Continue wrapper for Claude Code
+# claude-ac — Auto-Continue wrapper per Claude Code (v1.1)
 # =============================================================================
-# Wraps the `claude` CLI and automatically resumes sessions when API usage
-# limits are reached, without any manual intervention.
+# Avvolge la CLI `claude` e riprende automaticamente le sessioni quando si
+# raggiungono i limiti di utilizzo, senza intervento manuale.
 #
-# Usage:
-#   claude-ac [any claude options and prompt]
-#   claude-ac --ac-interval 600 --ac-retries 6 "build me an app"
+# Uso:
+#   claude-ac [opzioni claude e prompt]
+#   claude-ac --ac-interval 600 --ac-retries 6 "costruiscimi un'app"
 #
-# Project: https://github.com/YOUR_USERNAME/claude-auto-continue
-# License: MIT
+# Progetto: https://github.com/blackstardigitalstudio/claude-auto-continue
+# Licenza: MIT — Made in Italy
 # =============================================================================
 
 set -euo pipefail
@@ -19,16 +19,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
 CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 
-# shellcheck source=../lib/detect.sh
 source "$LIB_DIR/detect.sh"
-# shellcheck source=../lib/notify.sh
 source "$LIB_DIR/notify.sh"
-# shellcheck source=../lib/session.sh
 source "$LIB_DIR/session.sh"
-# shellcheck source=../config/defaults.sh
 source "$CONFIG_DIR/defaults.sh"
 
-# Override defaults from environment
 RETRY_INTERVAL="${CLAUDE_AC_INTERVAL:-$DEFAULT_RETRY_INTERVAL}"
 MAX_RETRIES="${CLAUDE_AC_MAX_RETRIES:-$DEFAULT_MAX_RETRIES}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
@@ -36,215 +31,142 @@ LOG_FILE="${CLAUDE_AC_LOG:-$DEFAULT_LOG_FILE}"
 VERBOSE="${CLAUDE_AC_VERBOSE:-0}"
 NOTIFY="${CLAUDE_AC_NOTIFY:-$DEFAULT_NOTIFY}"
 
-# Internal state
 _SESSION_TMP=""
 _RETRY_COUNT=0
-_SESSION_CWD="$PWD"
 _START_TIME=$(date +%s)
-
-# ---------------------------------------------------------------------------
-# Logging helpers
-# ---------------------------------------------------------------------------
+CLAUDE_ARGS=()
 
 log() {
     local level="$1"; shift
-    local msg="$*"
-    local ts
-    ts=$(date '+%H:%M:%S')
+    local msg="$*" ts; ts=$(date '+%H:%M:%S')
     case "$level" in
-        INFO)  echo "  â¬¡ claude-ac [$ts] $msg" ;;
-        WAIT)  echo "  â¸ claude-ac [$ts] $msg" ;;
-        RETRY) echo "  ð claude-ac [$ts] $msg" ;;
-        DONE)  echo "  â claude-ac [$ts] $msg" ;;
-        FAIL)  echo "  â claude-ac [$ts] $msg" >&2 ;;
-        DEBUG) [[ "$VERBOSE" == "1" ]] && echo "  Â· claude-ac [$ts] $msg" || true ;;
+        INFO)  echo "  ⬡ claude-ac [$ts] $msg" ;;
+        WAIT)  echo "  ⏸ claude-ac [$ts] $msg" ;;
+        RETRY) echo "  ↻ claude-ac [$ts] $msg" ;;
+        DONE)  echo "  ✓ claude-ac [$ts] $msg" ;;
+        FAIL)  echo "  ✗ claude-ac [$ts] $msg" >&2 ;;
+        DEBUG) [[ "$VERBOSE" == "1" ]] && echo "  · claude-ac [$ts] $msg" || true ;;
     esac
-
-    # Append to log file
     mkdir -p "$(dirname "$LOG_FILE")"
     echo "[$level $ts] $msg" >> "$LOG_FILE"
 }
 
 # ---------------------------------------------------------------------------
-# Parse auto-continue flags (strip them before passing to claude)
+# Parsing flag --ac-* (while + shift: gestisce correttamente i valori)
 # ---------------------------------------------------------------------------
-
 parse_ac_flags() {
-    local -a filtered_args=()
-    local skip_next=0
-
-    for arg in "$@"; do
-        if [[ "$skip_next" == "1" ]]; then
-            skip_next=0
-            continue
-        fi
-        case "$arg" in
-            --ac-interval=*) RETRY_INTERVAL="${arg#*=}" ;;
-            --ac-interval)   skip_next=1; RETRY_INTERVAL="${!OPTIND:-$RETRY_INTERVAL}" ;;
-            --ac-retries=*)  MAX_RETRIES="${arg#*=}" ;;
-            --ac-retries)    skip_next=1 ;;
+    local -a filtered=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --ac-interval=*) RETRY_INTERVAL="${1#*=}" ;;
+            --ac-interval)   shift; RETRY_INTERVAL="${1:-$RETRY_INTERVAL}" ;;
+            --ac-retries=*)  MAX_RETRIES="${1#*=}" ;;
+            --ac-retries)    shift; MAX_RETRIES="${1:-$MAX_RETRIES}" ;;
             --ac-verbose)    VERBOSE=1 ;;
             --ac-no-notify)  NOTIFY=0 ;;
             --ac-help)       show_help; exit 0 ;;
-            *)               filtered_args+=("$arg") ;;
+            *)               filtered+=("$1") ;;
         esac
+        shift
     done
-
-    CLAUDE_ARGS=("${filtered_args[@]}")
+    # Validazione numerica
+    [[ "$RETRY_INTERVAL" =~ ^[0-9]+$ ]] || { echo "Intervallo non valido" >&2; exit 2; }
+    [[ "$MAX_RETRIES"   =~ ^[0-9]+$ ]] || { echo "Numero retry non valido" >&2; exit 2; }
+    CLAUDE_ARGS=("${filtered[@]}")
 }
 
 show_help() {
-    cat <<EOF
-claude-ac â Auto-Continue wrapper for Claude Code
+    cat <<HELP
+claude-ac — Auto-Continue per Claude Code (v${CLAUDE_AC_VERSION:-dev})
 
-Usage: claude-ac [--ac-*] [claude options] [prompt]
+Uso: claude-ac [--ac-*] [opzioni claude] [prompt]
 
-Auto-Continue options:
-  --ac-interval <secs>   Seconds to wait between retries (default: $DEFAULT_RETRY_INTERVAL)
-  --ac-retries <n>       Maximum retry attempts (default: $DEFAULT_MAX_RETRIES)
-  --ac-verbose           Enable verbose logging
-  --ac-no-notify         Disable desktop notifications
-  --ac-help              Show this help
+Opzioni Auto-Continue:
+  --ac-interval <sec>   Attesa tra i tentativi (default: $DEFAULT_RETRY_INTERVAL)
+  --ac-retries <n>      Numero massimo di tentativi (default: $DEFAULT_MAX_RETRIES)
+  --ac-verbose          Log dettagliato
+  --ac-no-notify        Disabilita le notifiche desktop
+  --ac-help             Mostra questo aiuto
 
-Environment variables:
-  CLAUDE_AC_INTERVAL     Override retry interval
-  CLAUDE_AC_MAX_RETRIES  Override max retries
-  CLAUDE_AC_LOG          Log file path (default: $DEFAULT_LOG_FILE)
-  CLAUDE_AC_NOTIFY       Set to 0 to disable notifications
-  CLAUDE_BIN             Path to claude binary (default: claude)
+Variabili d'ambiente:
+  CLAUDE_AC_INTERVAL, CLAUDE_AC_MAX_RETRIES, CLAUDE_AC_LOG,
+  CLAUDE_AC_NOTIFY (0=off), CLAUDE_BIN
 
-Examples:
-  claude-ac "build me a todo app"
-  claude-ac --ac-interval 600 -p "write tests for main.py"
-  CLAUDE_AC_INTERVAL=300 claude-ac --continue
+Esempi:
+  claude-ac "costruiscimi una todo app"
+  claude-ac --ac-interval 600 -p "scrivi i test per main.py"
 
-When credits are exhausted, claude-ac will:
-  1. Detect the usage limit message in the output
-  2. Wait \$RETRY_INTERVAL seconds (default: 5 minutes for testing, increase for production)
-  3. Automatically run 'claude --continue' to resume your session
-  4. Send a desktop notification when resuming (if supported)
-
-EOF
+Made in Italy 🇮🇹 — https://github.com/blackstardigitalstudio/claude-auto-continue
+HELP
 }
 
-# ---------------------------------------------------------------------------
-# Cleanup on exit
-# ---------------------------------------------------------------------------
-
-cleanup() {
-    [[ -n "$_SESSION_TMP" && -f "$_SESSION_TMP" ]] && rm -f "$_SESSION_TMP"
-}
+cleanup() { [[ -n "$_SESSION_TMP" && -f "$_SESSION_TMP" ]] && rm -f "$_SESSION_TMP"; }
 trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------------------
-# Core retry loop
+# Aggiunge --continue una sola volta (senza word-splitting pericoloso)
 # ---------------------------------------------------------------------------
+ensure_continue_flag() {
+    local a
+    for a in "${args[@]}"; do
+        [[ "$a" == "--continue" ]] && return 0
+    done
+    args=("--continue" "${args[@]}")
+}
+
+countdown() {
+    local secs="$1" interval=30 elapsed=0 remaining mins s
+    while [[ $elapsed -lt $secs ]]; do
+        remaining=$(( secs - elapsed )); mins=$(( remaining / 60 )); s=$(( remaining % 60 ))
+        printf "\r  ⏳ claude-ac: %02d:%02d al prossimo tentativo..." "$mins" "$s"
+        sleep "$interval" 2>/dev/null || true
+        elapsed=$(( elapsed + interval ))
+    done
+    printf "\r  ✓ claude-ac: attesa completata.                          \n"
+}
 
 run_with_auto_continue() {
     local -a args=("$@")
-
     while true; do
-        _SESSION_TMP=$(mktemp /tmp/claude-ac-XXXXXX.log)
-        log DEBUG "Running: $CLAUDE_BIN ${args[*]}"
-        log DEBUG "Output capture: $_SESSION_TMP"
+        _SESSION_TMP=$(mktemp "${TMPDIR:-/tmp}/claude-ac-XXXXXX.log")
+        log DEBUG "Eseguo: $CLAUDE_BIN ${args[*]:-}"
 
-        # Run claude, tee output to terminal AND our capture file
-        # We use a subshell with pipefail to capture the real exit code
         local exit_code=0
-        "$CLAUDE_BIN" "${args[@]}" 2>&1 | tee "$_SESSION_TMP" || exit_code=$?
-
+        "$CLAUDE_BIN" "${args[@]}" 2>&1 | tee "$_SESSION_TMP" || exit_code=${PIPESTATUS[0]}
         log DEBUG "Exit code: $exit_code"
 
-        # ââ Check if we should retry ââââââââââââââââââââââââââââââââââââââ
         if should_retry "$_SESSION_TMP" "$exit_code"; then
-            _RETRY_COUNT=$((_RETRY_COUNT + 1))
-
+            _RETRY_COUNT=$(( _RETRY_COUNT + 1 ))
             if [[ $_RETRY_COUNT -gt $MAX_RETRIES ]]; then
-                log FAIL "Reached maximum retry limit ($MAX_RETRIES). Giving up."
-                notify_send "Claude Auto-Continue" \
-                    "Max retries reached ($MAX_RETRIES). Manual intervention needed." \
-                    "warning"
+                log FAIL "Raggiunto il limite di tentativi ($MAX_RETRIES). Mi fermo."
+                notify_send "Claude Auto-Continue" "Max tentativi raggiunti ($MAX_RETRIES)." "warning"
                 exit 1
             fi
-
-            # Try to extract the reset time from the output
-            local wait_secs
+            local wait_secs resume_at
             wait_secs=$(extract_wait_time "$_SESSION_TMP" "$RETRY_INTERVAL")
-
-            local resume_at
             resume_at=$(date -d "+${wait_secs} seconds" '+%H:%M:%S' 2>/dev/null \
-                     || date -v+${wait_secs}S '+%H:%M:%S' 2>/dev/null \
-                     || echo "~${wait_secs}s from now")
-
-            log WAIT "Usage limit detected. Retry $_RETRY_COUNT/$MAX_RETRIES"
-            log WAIT "Waiting ${wait_secs}s â will resume at $resume_at"
-
-            notify_send "Claude Auto-Continue" \
-                "Credits exhausted. Resuming at $resume_at (retry $_RETRY_COUNT/$MAX_RETRIES)." \
-                "info"
-
-            # Show a countdown so the user knows we're alive
+                     || date -v+${wait_secs}S '+%H:%M:%S' 2>/dev/null || echo "~${wait_secs}s")
+            log WAIT "Limite rilevato. Tentativo $_RETRY_COUNT/$MAX_RETRIES — ripresa alle $resume_at"
+            notify_send "Claude Auto-Continue" "Crediti esauriti. Riprendo alle $resume_at." "info"
             countdown "$wait_secs"
-
-            log RETRY "Resuming session with 'claude --continue'..."
-            notify_send "Claude Auto-Continue" "Resuming now..." "info"
-
-            # Switch to --continue for all subsequent attempts
-            args=("--continue" "${args[@]}")
-            # Remove any duplicate --continue flags
-            # shellcheck disable=SC2207
-            args=($(printf '%s\n' "${args[@]}" | awk '!seen[$0]++ || $0 != "--continue"'))
-
+            log RETRY "Riprendo con 'claude --continue'..."
+            ensure_continue_flag
         else
-            # ââ Clean exit or non-credit error ââââââââââââââââââââââââââ
             if [[ $exit_code -eq 0 ]]; then
-                log DONE "Session completed successfully."
+                log DONE "Sessione completata con successo."
             else
-                log FAIL "Session exited with code $exit_code (not a usage-limit error)."
+                log FAIL "Sessione uscita con codice $exit_code (non è un limite di utilizzo)."
             fi
-            exit $exit_code
+            exit "$exit_code"
         fi
     done
 }
 
-# ---------------------------------------------------------------------------
-# Countdown display
-# ---------------------------------------------------------------------------
-
-countdown() {
-    local secs="$1"
-    local interval=30  # Update every 30 seconds
-    local elapsed=0
-
-    while [[ $elapsed -lt $secs ]]; do
-        local remaining=$(( secs - elapsed ))
-        local mins=$(( remaining / 60 ))
-        local s=$(( remaining % 60 ))
-        printf "\r  â³ claude-ac: %02d:%02d remaining until retry..." "$mins" "$s"
-        sleep "$interval" &
-        wait $! 2>/dev/null || true
-        elapsed=$(( elapsed + interval ))
-    done
-    printf "\r  â claude-ac: Wait complete.                              \n"
-}
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 main() {
-    # Handle no-args case
-    if [[ $# -eq 0 ]]; then
-        show_help
-        exit 0
-    fi
-
+    [[ $# -eq 0 ]] && { show_help; exit 0; }
     parse_ac_flags "$@"
-
-    log INFO "claude-ac v${CLAUDE_AC_VERSION:-dev} â Auto-Continue enabled"
-    log INFO "Max retries: $MAX_RETRIES | Interval: ${RETRY_INTERVAL}s | Notify: $NOTIFY"
-    log DEBUG "Args passed to claude: ${CLAUDE_ARGS[*]:-<none>}"
-
+    log INFO "claude-ac v${CLAUDE_AC_VERSION:-dev} — Auto-Continue attivo"
+    log INFO "Max retry: $MAX_RETRIES | Intervallo: ${RETRY_INTERVAL}s | Notifiche: $NOTIFY"
     run_with_auto_continue "${CLAUDE_ARGS[@]}"
 }
 
