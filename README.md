@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.png" alt="claude-ac — Auto-Continue per Claude Code" width="100%">
+<img src="https://raw.githubusercontent.com/blackstardigitalstudio/claude-auto-continue/main/banner.png" alt="claude-ac — Auto-Continue per Claude Code" width="100%">
 
 # ☕ claude-ac — Auto-Continue per Claude Code
 
