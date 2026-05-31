@@ -33,19 +33,37 @@ log_hook() { echo "[HOOK $(date '+%H:%M:%S')] $1" >> "$CACHE_DIR/hook.log"; }
 emit_and_exit() { echo '{"continue": false, "suppressOutput": false}'; exit 0; }
 
 # ---------------------------------------------------------------------------
-# Leggi il contesto dell'hook da stdin (JSON da Claude Code)
+# Leggi il contesto dell'hook da stdin (JSON da Claude Code).
+# Claude Code invia il JSON su stdin e chiude il flusso: leggiamo TUTTO
+# (non una sola riga) ma solo se stdin non è un terminale, così l'hook può
+# essere anche lanciato a mano senza bloccarsi in attesa di input.
 # ---------------------------------------------------------------------------
 HOOK_INPUT=""
-read -t 2 -r HOOK_INPUT 2>/dev/null || true
+if [ ! -t 0 ]; then
+    HOOK_INPUT="$(cat 2>/dev/null || true)"
+fi
 
+# Parser JSON portabile (no `grep -oP`, che manca su macOS/BSD).
+# Estrae il valore stringa della chiave $2: "$2": "valore"
 parse_json_field() {
-    grep -oP "\"$2\":\s*\K\"[^\"]+\"" <<<"$1" 2>/dev/null | tr -d '"' | head -1
+    printf '%s' "$1" | tr -d '\n\r' \
+        | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed -E "s/.*:[[:space:]]*\"(.*)\"$/\1/"
+}
+
+# Estrae un valore booleano JSON (non fra virgolette): "$2": true|false
+parse_json_bool() {
+    printf '%s' "$1" | tr -d '\n\r' \
+        | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*(true|false)" \
+        | grep -oE "(true|false)" \
+        | head -1
 }
 
 TRANSCRIPT_PATH=$(parse_json_field "$HOOK_INPUT" "transcript_path")
 SESSION_ID=$(parse_json_field "$HOOK_INPUT" "session_id")
 SESSION_CWD=$(parse_json_field "$HOOK_INPUT" "cwd")
-STOP_HOOK_ACTIVE=$(parse_json_field "$HOOK_INPUT" "stop_hook_active")
+STOP_HOOK_ACTIVE=$(parse_json_bool "$HOOK_INPUT" "stop_hook_active")
 
 # ---------------------------------------------------------------------------
 # ANTI-LOOP: se siamo già dentro un ciclo di Stop avviato dall'hook, esci.

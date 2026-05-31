@@ -100,7 +100,13 @@ Made in Italy 🇮🇹 — https://github.com/blackstardigitalstudio/claude-auto
 HELP
 }
 
-cleanup() { [[ -n "$_SESSION_TMP" && -f "$_SESSION_TMP" ]] && rm -f "$_SESSION_TMP"; }
+cleanup() {
+    # Preserva il codice di uscita previsto: senza catturarlo, l'esito
+    # dell'ultimo comando della trap sovrascriverebbe `exit 0` (es. --ac-help).
+    local rc=$?
+    [[ -n "$_SESSION_TMP" && -f "$_SESSION_TMP" ]] && rm -f "$_SESSION_TMP"
+    return "$rc"
+}
 trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------------------
@@ -128,7 +134,8 @@ countdown() {
 run_with_auto_continue() {
     local -a args=("$@")
     while true; do
-        _SESSION_TMP=$(mktemp "${TMPDIR:-/tmp}/claude-ac-XXXXXX.log")
+        # NB: i template di mktemp devono terminare con le X (compatibilità BSD/macOS).
+        _SESSION_TMP=$(mktemp "${TMPDIR:-/tmp}/claude-ac-XXXXXX")
         log DEBUG "Eseguo: $CLAUDE_BIN ${args[*]:-}"
 
         local exit_code=0

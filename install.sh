@@ -1,45 +1,45 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install.sh â Installer for claude-ac (Auto-Continue for Claude Code)
+# install.sh - Installer for claude-ac (Auto-Continue for Claude Code)
 # =============================================================================
-# Installs claude-ac system-wide (or user-local) and optionally registers
-# the Stop hook in ~/.claude/settings.json.
+# Installs claude-ac (user-local or system-wide) and registers the Stop hook
+# in ~/.claude/settings.json.
 #
 # Usage:
-#   ./install.sh              â install to ~/.local/bin (user-local)
-#   ./install.sh --system     â install to /usr/local/bin (needs sudo)
-#   ./install.sh --uninstall  â remove everything
+#   ./install.sh              install to ~/.local/bin (user-local)
+#   ./install.sh --system     install to /usr/local/bin (needs sudo)
+#   ./install.sh --uninstall  remove everything
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="1.0.0"
+VERSION="1.1.1"
 
 # ANSI colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
-info()    { echo -e "${BLUE}  â¸${RESET} $*"; }
-success() { echo -e "${GREEN}  â${RESET} $*"; }
-warn()    { echo -e "${YELLOW}  â ${RESET} $*"; }
-error()   { echo -e "${RED}  â${RESET} $*" >&2; }
+info()    { echo -e "${BLUE}  >${RESET} $*"; }
+success() { echo -e "${GREEN}  +${RESET} $*"; }
+warn()    { echo -e "${YELLOW}  !${RESET} $*"; }
+error()   { echo -e "${RED}  x${RESET} $*" >&2; }
 header()  { echo -e "\n${BOLD}${CYAN}$*${RESET}"; }
 
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
 print_banner() {
-    echo -e "${BOLD}"
+    echo -e "${BOLD}${CYAN}"
     cat <<'BANNER'
-  âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-  â         claude-ac â Auto-Continue for Claude Code        â
-  â                                                           â
-  â   Never lose progress to credit limits again.             â
-  â   Your sessions resume automatically. ð®ð¹                 â
-  â                                                           â
-  â   Made in Italy Â· Crafted for Claude Code                 â
-  âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  +---------------------------------------------------------+
+  |        claude-ac - Auto-Continue for Claude Code        |
+  |                                                         |
+  |   Never lose progress to credit limits again.          |
+  |   Your sessions resume automatically.                  |
+  |                                                         |
+  |   Made in Italy - Crafted for Claude Code              |
+  +---------------------------------------------------------+
 BANNER
     echo -e "${RESET}"
 }
@@ -63,14 +63,13 @@ done
 if [[ "$SYSTEM_INSTALL" -eq 1 ]]; then
     INSTALL_PREFIX="/usr/local"
     LIB_PREFIX="/usr/local/lib/claude-ac"
-    HOOK_PREFIX="/usr/local/lib/claude-ac/hooks"
 else
     INSTALL_PREFIX="${HOME}/.local"
     LIB_PREFIX="${HOME}/.local/lib/claude-ac"
-    HOOK_PREFIX="${HOME}/.local/lib/claude-ac/hooks"
 fi
 
 BIN_DIR="${INSTALL_PREFIX}/bin"
+HOOK_PATH="${LIB_PREFIX}/hooks/stop.sh"
 SETTINGS_FILE="${HOME}/.claude/settings.json"
 
 # ---------------------------------------------------------------------------
@@ -83,9 +82,40 @@ uninstall() {
     [[ -d "$LIB_PREFIX" ]] && rm -rf "$LIB_PREFIX" && success "Removed $LIB_PREFIX"
     [[ -d "${HOME}/.cache/claude-ac" ]] && rm -rf "${HOME}/.cache/claude-ac" && success "Removed cache"
 
-    # Remove hook from settings.json if present
-    if [[ -f "$SETTINGS_FILE" ]]; then
-        warn "Please manually remove the 'Stop' hook entry from $SETTINGS_FILE"
+    if [[ -f "$SETTINGS_FILE" ]] && grep -q "claude-ac" "$SETTINGS_FILE" 2>/dev/null; then
+        if command -v python3 &>/dev/null; then
+            python3 - "$SETTINGS_FILE" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(0)
+hooks = data.get("hooks", {})
+stop = hooks.get("Stop", [])
+new_stop = []
+for group in stop:
+    inner = [h for h in group.get("hooks", []) if "claude-ac" not in str(h.get("command", ""))]
+    if inner:
+        group["hooks"] = inner
+        new_stop.append(group)
+if new_stop:
+    hooks["Stop"] = new_stop
+else:
+    hooks.pop("Stop", None)
+if hooks:
+    data["hooks"] = hooks
+else:
+    data.pop("hooks", None)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PYEOF
+            success "Removed Stop hook from $SETTINGS_FILE"
+        else
+            warn "Please manually remove the 'claude-ac' Stop hook from $SETTINGS_FILE"
+        fi
     fi
 
     success "claude-ac uninstalled."
@@ -109,15 +139,20 @@ check_deps() {
     fi
 
     local claude_version
-    claude_version=$(claude --version 2>/dev/null | head -1)
-    success "Found: $claude_version"
+    claude_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
+    success "Found Claude Code: $claude_version"
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         error "Missing dependencies: ${missing[*]}"
         exit 1
     fi
 
-    success "All dependencies satisfied."
+    if ! command -v python3 &>/dev/null; then
+        warn "python3 not found: the installer cannot auto-merge settings.json."
+        warn "It will print manual instructions instead."
+    fi
+
+    success "All required dependencies satisfied."
 }
 
 # ---------------------------------------------------------------------------
@@ -128,20 +163,19 @@ install_files() {
 
     mkdir -p "$BIN_DIR" "$LIB_PREFIX"/{lib,config,hooks}
 
-    # Copy core files
-    cp "$SCRIPT_DIR/bin/claude-ac"     "$BIN_DIR/claude-ac"
-    cp "$SCRIPT_DIR/lib/detect.sh"     "$LIB_PREFIX/lib/detect.sh"
-    cp "$SCRIPT_DIR/lib/notify.sh"     "$LIB_PREFIX/lib/notify.sh"
-    cp "$SCRIPT_DIR/lib/session.sh"    "$LIB_PREFIX/lib/session.sh"
+    cp "$SCRIPT_DIR/bin/claude-ac"      "$BIN_DIR/claude-ac"
+    cp "$SCRIPT_DIR/lib/detect.sh"      "$LIB_PREFIX/lib/detect.sh"
+    cp "$SCRIPT_DIR/lib/notify.sh"      "$LIB_PREFIX/lib/notify.sh"
+    cp "$SCRIPT_DIR/lib/session.sh"     "$LIB_PREFIX/lib/session.sh"
     cp "$SCRIPT_DIR/config/defaults.sh" "$LIB_PREFIX/config/defaults.sh"
-    cp "$SCRIPT_DIR/hooks/stop.sh"     "$LIB_PREFIX/hooks/stop.sh"
+    cp "$SCRIPT_DIR/hooks/stop.sh"      "$LIB_PREFIX/hooks/stop.sh"
 
-    # Make scripts executable
     chmod +x "$BIN_DIR/claude-ac" "$LIB_PREFIX/hooks/stop.sh"
 
-    # Update lib paths in the wrapper to point to the installed location
-    sed -i "s|SCRIPT_DIR/../lib|${LIB_PREFIX}/lib|g; s|SCRIPT_DIR/../config|${LIB_PREFIX}/config|g" \
+    # Point the installed wrapper at the installed lib/config location.
+    sed -i.bak "s|\$SCRIPT_DIR/../lib|${LIB_PREFIX}/lib|g; s|\$SCRIPT_DIR/../config|${LIB_PREFIX}/config|g" \
         "$BIN_DIR/claude-ac" 2>/dev/null || true
+    rm -f "$BIN_DIR/claude-ac.bak" 2>/dev/null || true
 
     success "Files installed to $INSTALL_PREFIX"
 }
@@ -154,58 +188,54 @@ register_hook() {
 
     mkdir -p "$(dirname "$SETTINGS_FILE")"
 
-    local hook_cmd="$LIB_PREFIX/hooks/stop.sh"
-    local hook_entry
-    hook_entry=$(cat <<EOF
-{
-  "type": "command",
-  "command": "$hook_cmd"
-}
-EOF
-)
-
-    if [[ ! -f "$SETTINGS_FILE" ]]; then
-        # Create a fresh settings file
-        cat > "$SETTINGS_FILE" <<EOF
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [$hook_entry]
-      }
-    ]
-  }
-}
-EOF
-        success "Created $SETTINGS_FILE with Stop hook."
-        return 0
-    fi
-
-    # Settings file exists â check if hook already registered
-    if grep -q "claude-ac" "$SETTINGS_FILE" 2>/dev/null; then
+    if [[ -f "$SETTINGS_FILE" ]] && grep -q "claude-ac" "$SETTINGS_FILE" 2>/dev/null; then
         warn "Hook already registered in $SETTINGS_FILE. Skipping."
         return 0
     fi
 
-    # Backup existing settings
-    cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak"
-    success "Backed up existing settings to ${SETTINGS_FILE}.bak"
+    if command -v python3 &>/dev/null; then
+        [[ -f "$SETTINGS_FILE" ]] && cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak" \
+            && success "Backed up existing settings to ${SETTINGS_FILE}.bak"
 
-    warn "Automatic merge of existing settings.json is not supported."
-    echo ""
-    echo "  Please add this to the 'hooks.Stop' array in $SETTINGS_FILE:"
-    echo ""
-    echo "  $hook_entry"
-    echo ""
-    echo "  Full example:"
+        python3 - "$SETTINGS_FILE" "$HOOK_PATH" <<'PYEOF'
+import json, os, sys
+path, hook_cmd = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+hooks = data.setdefault("hooks", {})
+stop = hooks.setdefault("Stop", [])
+entry = {"type": "command", "command": hook_cmd}
+# Reuse a matcher:"" group if present, otherwise create one.
+group = next((g for g in stop if g.get("matcher", "") == ""), None)
+if group is None:
+    group = {"matcher": "", "hooks": []}
+    stop.append(group)
+group.setdefault("hooks", []).append(entry)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PYEOF
+        success "Stop hook registered in $SETTINGS_FILE"
+        return 0
+    fi
+
+    # Fallback: no python3 -> print manual instructions.
+    warn "python3 not available: add this to 'hooks.Stop' in $SETTINGS_FILE manually:"
     cat <<EOF
+
   {
     "hooks": {
       "Stop": [
         {
           "matcher": "",
-          "hooks": [$hook_entry]
+          "hooks": [
+            { "type": "command", "command": "$HOOK_PATH" }
+          ]
         }
       ]
     }
@@ -243,15 +273,15 @@ install_files
 register_hook
 check_path
 
-header "Installation complete! ð®ð¹"
+header "Installation complete! Made in Italy"
 echo ""
 echo -e "  ${BOLD}Quick start:${RESET}"
 echo "    claude-ac \"build me a todo app\""
 echo "    claude-ac --continue   # resume last session"
-echo "    claude-ac --help"
+echo "    claude-ac --ac-help"
 echo ""
 echo "  When Claude Code hits a usage limit, claude-ac will"
 echo "  automatically resume your session. No babysitting required."
 echo ""
-echo "  ${CYAN}Made with â¤ï¸  in Italy â https://github.com/YOUR_USERNAME/claude-auto-continue${RESET}"
+echo -e "  ${CYAN}Made in Italy - https://github.com/blackstardigitalstudio/claude-auto-continue${RESET}"
 echo ""

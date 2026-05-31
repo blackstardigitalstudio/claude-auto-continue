@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tests/test.sh â Test suite for claude-ac
+# tests/test.sh - Test suite for claude-ac
 # =============================================================================
 # Run with: bash tests/test.sh
 # Or:       bash tests/test.sh --verbose
@@ -32,13 +32,13 @@ VERBOSE_TESTS="${1:-}"
 
 _pass() {
     _PASS=$((_PASS + 1))
-    [[ "$VERBOSE_TESTS" == "--verbose" ]] && echo "  â $1"
+    [[ "$VERBOSE_TESTS" == "--verbose" ]] && echo "  [PASS] $1"
     return 0
 }
 
 _fail() {
     _FAIL=$((_FAIL + 1))
-    echo "  â $1"
+    echo "  [FAIL] $1"
     [[ -n "${2:-}" ]] && echo "      got:  $2"
     [[ -n "${3:-}" ]] && echo "      want: $3"
     return 0
@@ -69,7 +69,7 @@ assert_numeric() {
     if [[ "$val" =~ ^[0-9]+$ ]]; then _pass "$desc"; else _fail "$desc" "'$val'" "^[0-9]+$"; fi
 }
 
-# assert_gt <desc> <a> <b>  â asserts a > b
+# assert_gt <desc> <a> <b>  -> asserts a > b
 assert_gt() {
     local desc="$1" a="$2" b="$3"
     [[ "$a" -gt "$b" ]] && _pass "$desc" || _fail "$desc" "$a" "> $b"
@@ -90,29 +90,29 @@ setup_fixtures() {
     mkdir -p "$FIXTURES_DIR"
 
     cat > "$FIXTURES_DIR/credit_limit.txt" <<'EOF'
-â Bash(cat src/main.py)
-  â³ [output truncated]
+* Bash(cat src/main.py)
+  [output truncated]
 
-â Error: Claude AI usage limit has been reached.
+* Error: Claude AI usage limit has been reached.
   Your usage will reset at 5:00 PM.
   Please try again later.
 EOF
 
     cat > "$FIXTURES_DIR/rate_limit_429.txt" <<'EOF'
-â Read(README.md)
+* Read(README.md)
 Error: 429 Too Many Requests
 rate_limit_error: You have exceeded your rate limit. Retry after 60 seconds.
 EOF
 
     cat > "$FIXTURES_DIR/success.txt" <<'EOF'
-â Bash(npm test)
-  â³ All tests passed (42/42)
+* Bash(npm test)
+  All tests passed (42/42)
 Task completed successfully. All 42 tests pass.
 EOF
 
     cat > "$FIXTURES_DIR/interrupted.txt" <<'EOF'
-â Bash(npm run build)
-  â³ Building...
+* Bash(npm run build)
+  Building...
 Interrupted by user.
 EOF
 
@@ -132,7 +132,7 @@ setup_fixtures
 # ---------------------------------------------------------------------------
 # Note: under set -e we use "RC=0; cmd || RC=$?" to safely capture exit codes
 # without triggering errexit on expected-false results.
-section "should_retry â credit exhaustion detection"
+section "should_retry - credit exhaustion detection"
 
 RC=0; should_retry "$FIXTURES_DIR/credit_limit.txt"   1 || RC=$?; assert_true  "detects 'usage limit' pattern"          $RC
 RC=0; should_retry "$FIXTURES_DIR/rate_limit_429.txt" 1 || RC=$?; assert_true  "detects 429 / rate_limit_error"         $RC
@@ -141,20 +141,20 @@ RC=0; should_retry "$FIXTURES_DIR/success.txt"        0 || RC=$?; assert_false "
 RC=0; should_retry "$FIXTURES_DIR/credit_limit.txt"   0 || RC=$?; assert_false "exit code 0 = never retry"             $RC
 RC=0; should_retry "$FIXTURES_DIR/interrupted.txt"    1 || RC=$?; assert_false "user interrupt is not a credit error"  $RC
 
-# Missing file â should_retry returns 1 for non-existent file
+# Missing file -> should_retry returns 1 for non-existent file
 RC=0; should_retry "/tmp/no_such_file_claude_ac_$$" 1 2>/dev/null || RC=$?
 assert_false "returns false for missing file" $RC
 
 # ---------------------------------------------------------------------------
 # Tests: extract_wait_time
 # ---------------------------------------------------------------------------
-section "extract_wait_time â reset time parsing"
+section "extract_wait_time - reset time parsing"
 
 RESULT=$(extract_wait_time "$FIXTURES_DIR/credit_limit.txt" 999 2>/dev/null || echo "999")
-assert_numeric "parses 'reset at HH:MM' â result is numeric" "$RESULT"
+assert_numeric "parses 'reset at HH:MM' -> result is numeric" "$RESULT"
 
 RESULT=$(extract_wait_time "$FIXTURES_DIR/reset_hours.txt" 999 2>/dev/null || echo "999")
-assert_numeric "parses 'resets in X hours Y minutes' â numeric" "$RESULT"
+assert_numeric "parses 'resets in X hours Y minutes' -> numeric" "$RESULT"
 assert_gt "2h30m gives at least 9000 seconds" "$RESULT" 8999
 
 RESULT=$(extract_wait_time "$FIXTURES_DIR/interrupted.txt" 300 2>/dev/null || echo "300")
@@ -163,7 +163,7 @@ assert_eq "falls back to default when no time info" "$RESULT" "300"
 # ---------------------------------------------------------------------------
 # Tests: notify_send (must not crash)
 # ---------------------------------------------------------------------------
-section "notify_send â no-crash guarantee"
+section "notify_send - no-crash guarantee"
 
 NOTIFY=0
 notify_send "Test" "Should be silent" "info"
@@ -202,7 +202,7 @@ assert_eq "3661 seconds" "$(format_duration 3661)" "01h 01m 01s"
 # ---------------------------------------------------------------------------
 # Tests: bash syntax of every script
 # ---------------------------------------------------------------------------
-section "bash syntax check â all scripts"
+section "bash syntax check - all scripts"
 
 bash -n "$ROOT_DIR/bin/claude-ac";         assert_true "bin/claude-ac"         $?
 bash -n "$ROOT_DIR/hooks/stop.sh";         assert_true "hooks/stop.sh"         $?
@@ -215,7 +215,7 @@ bash -n "$ROOT_DIR/install.sh";            assert_true "install.sh"            $
 # ---------------------------------------------------------------------------
 # Tests: defaults values
 # ---------------------------------------------------------------------------
-section "config/defaults.sh â values"
+section "config/defaults.sh - values"
 
 assert_numeric  "DEFAULT_RETRY_INTERVAL is numeric"  "$DEFAULT_RETRY_INTERVAL"
 assert_numeric  "DEFAULT_MAX_RETRIES is numeric"      "$DEFAULT_MAX_RETRIES"
@@ -227,10 +227,10 @@ assert_nonempty "CLAUDE_AC_VERSION is set"            "$CLAUDE_AC_VERSION"
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
-echo "ââââââââââââââââââââââââââââââââââââââââââââ"
+echo "============================================"
 TOTAL=$((_PASS + _FAIL))
-echo "  Results: $TOTAL tests â â $_PASS passed  â $_FAIL failed"
-echo "ââââââââââââââââââââââââââââââââââââââââââââ"
+echo "  Results: $TOTAL tests - $_PASS passed / $_FAIL failed"
+echo "============================================"
 echo ""
 
 [[ $_FAIL -eq 0 ]] && exit 0 || exit 1

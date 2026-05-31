@@ -3,28 +3,33 @@
 # lib/detect.sh — Rilevamento esaurimento crediti (versione rafforzata)
 # =============================================================================
 # Determina se una sessione si è fermata per limiti di utilizzo / crediti.
-# v1.1: pattern ristretti a marcatori d'errore reali delle API e ricerca
-# limitata alla coda dell'output, per ridurre i falsi positivi causati da
-# contenuti esterni (pagine web, output di tool) letti durante la sessione.
+# v1.1: pattern ristretti a marcatori d'errore reali e ricerca limitata alla
+# coda dell'output, per ridurre i falsi positivi causati da contenuti esterni
+# (pagine web, output di tool) letti durante la sessione.
 # =============================================================================
+
+# Include-guard: evita doppio source nello stesso processo.
+[[ -n "${_CLAUDE_AC_DETECT_LOADED:-}" ]] && return 0
+_CLAUDE_AC_DETECT_LOADED=1
 
 # Numero di righe finali da ispezionare: gli errori di limite compaiono in
 # fondo all'output, non nel mezzo della conversazione.
-readonly DETECT_TAIL_LINES="${CLAUDE_AC_DETECT_TAIL:-60}"
+DETECT_TAIL_LINES="${CLAUDE_AC_DETECT_TAIL:-60}"
 
-# Pattern FORTI e specifici: tipi d'errore delle API Anthropic e messaggi di
-# limite inequivocabili. Niente più parole generiche tipo "capacity" o "429"
-# da sole, che facevano scattare falsi positivi.
-readonly CREDIT_PATTERNS=(
+# Pattern di esaurimento crediti / limiti. Coprono sia i tipi d'errore delle
+# API Anthropic sia i messaggi mostrati dalla CLI di Claude Code. La ricerca
+# è confinata alle ultime righe e scatta solo con exit-code != 0, quindi anche
+# i pattern più brevi ("usage limit", "overloaded") sono sicuri.
+CREDIT_PATTERNS=(
+    "usage limit"
     "rate_limit_error"
     "RateLimitError"
+    "overloaded"
     "overloaded_error"
     "RESOURCE_EXHAUSTED"
     "insufficient_quota"
     "insufficient credits"
     "out of credits"
-    "usage limit reached"
-    "reached your usage limit"
     "reached your daily"
     "monthly usage limit"
     "429 Too Many Requests"
@@ -34,7 +39,7 @@ readonly CREDIT_PATTERNS=(
     "quota exceeded"
 )
 
-# Safe fallback per la funzione log se sourcato da solo
+# Safe fallback per la funzione log se sourcato da solo.
 if ! declare -f log &>/dev/null; then
     log() { :; }
 fi
