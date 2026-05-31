@@ -1,0 +1,9 @@
+# Gli script di shell DEVONO avere fine-riga LF: con CRLF bash fallisce
+# su Linux/macOS (errore "\r": command not found / bad interpreter).
+*.sh        text eol=lf
+bin/claude-ac text eol=lf
+hooks/*.sh  text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.yml       text eol=lf
+*.png       binary
