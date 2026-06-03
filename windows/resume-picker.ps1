@@ -146,7 +146,7 @@ if(Test-Path $PrefFile){ foreach($l in (Get-Content $PrefFile -Encoding utf8)){ 
 # ============================ FINESTRA (stile) ==============================
 $form=New-Object System.Windows.Forms.Form
 $form.Text="Claude - Riprendi il lavoro"
-$form.Size=New-Object System.Drawing.Size(600,660)
+$form.ClientSize=New-Object System.Drawing.Size(624,600)
 $form.StartPosition="CenterScreen"; $form.TopMost=$true
 $form.FormBorderStyle="FixedSingle"; $form.MaximizeBox=$false; $form.MinimizeBox=$false
 $form.BackColor=$C_PANEL; $form.Font=$F_ITEM
@@ -166,35 +166,43 @@ $sub.AutoSize=$true; $sub.Location=New-Object System.Drawing.Point(24,54); $head
 $tri=@($C_GREEN,[System.Drawing.Color]::White,$C_RED)
 for($i=0;$i -lt 3;$i++){ $p=New-Object System.Windows.Forms.Panel; $p.Height=4; $p.Width=200; $p.Top=88; $p.Left=($i*200); $p.BackColor=$tri[$i]; $header.Controls.Add($p) }
 
-# ---- Footer ----
+# ---- Footer (layout pulito a 3 righe) ----
 $footer=New-Object System.Windows.Forms.Panel
-$footer.Dock="Bottom"; $footer.Height=96; $footer.BackColor=$C_CARD
+$footer.Dock="Bottom"; $footer.Height=128; $footer.BackColor=$C_CARD
 $form.Controls.Add($footer)
 $sep=New-Object System.Windows.Forms.Panel; $sep.Dock="Top"; $sep.Height=1; $sep.BackColor=[System.Drawing.Color]::FromArgb(225,228,233); $footer.Controls.Add($sep)
-
-$chkRemember=New-Object System.Windows.Forms.CheckBox
-$chkRemember.Text="Ricorda la mia selezione"; $chkRemember.AutoSize=$true; $chkRemember.ForeColor=$C_TEXT
-$chkRemember.Location=New-Object System.Drawing.Point(20,14); if($remembered.Count -gt 0){$chkRemember.Checked=$true}; $footer.Controls.Add($chkRemember)
-
-$status=New-Object System.Windows.Forms.Label
-$status.AutoSize=$true; $status.ForeColor=$C_MUTED; $status.Location=New-Object System.Drawing.Point(20,40); $footer.Controls.Add($status)
-
-$madein=New-Object System.Windows.Forms.Label
-$madein.Text="Made in Italy"; $madein.AutoSize=$true; $madein.ForeColor=$C_MUTED; $madein.Font=$F_SUB
-$madein.Location=New-Object System.Drawing.Point(20,66); $footer.Controls.Add($madein)
-for($i=0;$i -lt 3;$i++){ $p=New-Object System.Windows.Forms.Panel; $p.Size=New-Object System.Drawing.Size(10,12); $p.Top=66; $p.Left=(96+$i*11); $p.BackColor=$tri[$i]; if($i -eq 1){$p.BorderStyle="FixedSingle"}; $footer.Controls.Add($p) }
+$CW=$form.ClientSize.Width
 
 function New-StyledButton($text,$primary){
-    $b=New-Object System.Windows.Forms.Button; $b.Text=$text; $b.Font=$F_BTN; $b.FlatStyle="Flat"; $b.Height=34; $b.Cursor="Hand"
+    $b=New-Object System.Windows.Forms.Button; $b.Text=$text; $b.Font=$F_BTN; $b.FlatStyle="Flat"; $b.Cursor="Hand"
     $b.FlatAppearance.BorderSize=0
     if($primary){ $b.BackColor=$C_ACCENT; $b.ForeColor=[System.Drawing.Color]::White }
     else { $b.BackColor=[System.Drawing.Color]::FromArgb(238,240,243); $b.ForeColor=$C_TEXT }
     return $b
 }
-$btnGo=New-StyledButton "Riprendi selezionate" $true; $btnGo.Width=168; $btnGo.Location=New-Object System.Drawing.Point(404,46); $footer.Controls.Add($btnGo)
-$btnDetect=New-StyledButton "Rileva bloccate" $false; $btnDetect.Width=130; $btnDetect.Location=New-Object System.Drawing.Point(268,46); $footer.Controls.Add($btnDetect)
-$btnAll=New-StyledButton "Tutte" $false; $btnAll.Width=64; $btnAll.Location=New-Object System.Drawing.Point(404,12); $footer.Controls.Add($btnAll)
-$btnNone=New-StyledButton "Nessuna" $false; $btnNone.Width=80; $btnNone.Location=New-Object System.Drawing.Point(472,12); $footer.Controls.Add($btnNone)
+
+# Riga 1: a sinistra "Ricorda", a destra Tutte / Nessuna
+$chkRemember=New-Object System.Windows.Forms.CheckBox
+$chkRemember.Text="Ricorda la mia selezione"; $chkRemember.AutoSize=$true; $chkRemember.ForeColor=$C_TEXT
+$chkRemember.Location=New-Object System.Drawing.Point(20,16); if($remembered.Count -gt 0){$chkRemember.Checked=$true}; $footer.Controls.Add($chkRemember)
+$btnNone=New-StyledButton "Nessuna" $false; $btnNone.Size=New-Object System.Drawing.Size(84,30); $btnNone.Location=New-Object System.Drawing.Point(($CW-20-84),12); $footer.Controls.Add($btnNone)
+$btnAll=New-StyledButton "Tutte" $false; $btnAll.Size=New-Object System.Drawing.Size(74,30); $btnAll.Location=New-Object System.Drawing.Point(($btnNone.Left-8-74),12); $footer.Controls.Add($btnAll)
+
+# Riga 2: stato (riga propria, niente sovrapposizioni)
+$status=New-Object System.Windows.Forms.Label
+$status.AutoSize=$true; $status.ForeColor=$C_MUTED; $status.Location=New-Object System.Drawing.Point(20,50); $footer.Controls.Add($status)
+
+# Riga 3: a sinistra Made in Italy + bandiera con bordo, a destra i pulsanti azione
+$madein=New-Object System.Windows.Forms.Label
+$madein.Text="Made in Italy"; $madein.AutoSize=$true; $madein.ForeColor=$C_MUTED; $madein.Font=$F_SUB
+$madein.Location=New-Object System.Drawing.Point(20,92); $footer.Controls.Add($madein)
+$flag=New-Object System.Windows.Forms.Panel; $flag.Size=New-Object System.Drawing.Size(27,16); $flag.Location=New-Object System.Drawing.Point(112,90); $flag.BorderStyle="FixedSingle"; $footer.Controls.Add($flag)
+$bar0=New-Object System.Windows.Forms.Panel; $bar0.Size=New-Object System.Drawing.Size(8,14); $bar0.Location=New-Object System.Drawing.Point(0,0); $bar0.BackColor=$C_GREEN; $flag.Controls.Add($bar0)
+$bar1=New-Object System.Windows.Forms.Panel; $bar1.Size=New-Object System.Drawing.Size(8,14); $bar1.Location=New-Object System.Drawing.Point(8,0); $bar1.BackColor=[System.Drawing.Color]::White; $flag.Controls.Add($bar1)
+$bar2=New-Object System.Windows.Forms.Panel; $bar2.Size=New-Object System.Drawing.Size(9,14); $bar2.Location=New-Object System.Drawing.Point(16,0); $bar2.BackColor=$C_RED; $flag.Controls.Add($bar2)
+
+$btnGo=New-StyledButton "Riprendi selezionate" $true; $btnGo.Size=New-Object System.Drawing.Size(190,38); $btnGo.Location=New-Object System.Drawing.Point(($CW-20-190),80); $footer.Controls.Add($btnGo)
+$btnDetect=New-StyledButton "Rileva bloccate" $false; $btnDetect.Size=New-Object System.Drawing.Size(150,38); $btnDetect.Location=New-Object System.Drawing.Point(($btnGo.Left-10-150),80); $footer.Controls.Add($btnDetect)
 
 # ---- Area centrale scrollabile con gruppi ----
 $scroll=New-Object System.Windows.Forms.Panel
@@ -215,11 +223,11 @@ foreach($g in $GROUPS){
         $em=New-Object System.Windows.Forms.Label; $em.Text="   (nessuna sessione in questa sezione)"; $em.ForeColor=$C_MUTED; $em.AutoSize=$true; $em.Location=New-Object System.Drawing.Point(18,$y); $scroll.Controls.Add($em); $y+=28; continue
     }
     foreach($s in $items){
-        $card=New-Object System.Windows.Forms.Panel; $card.Size=New-Object System.Drawing.Size(536,38); $card.Location=New-Object System.Drawing.Point(8,$y); $card.BackColor=$C_CARD
-        $cb=New-Object System.Windows.Forms.CheckBox; $cb.AutoSize=$false; $cb.Size=New-Object System.Drawing.Size(470,20); $cb.Location=New-Object System.Drawing.Point(12,9)
+        $card=New-Object System.Windows.Forms.Panel; $card.Size=New-Object System.Drawing.Size(552,38); $card.Location=New-Object System.Drawing.Point(8,$y); $card.BackColor=$C_CARD
+        $cb=New-Object System.Windows.Forms.CheckBox; $cb.AutoSize=$false; $cb.AutoEllipsis=$true; $cb.Size=New-Object System.Drawing.Size(396,20); $cb.Location=New-Object System.Drawing.Point(12,9)
         $cb.Text=$s.Title; $cb.Font=$F_ITEM; $cb.ForeColor=$C_TEXT
         $key=("{0}|{1}" -f $g,$s.Title); if($remembered.ContainsKey($key)){ $cb.Checked=$true }
-        $st=New-Object System.Windows.Forms.Label; $st.Text=$s.State; $st.AutoSize=$true; $st.Font=$F_SUB; $st.ForeColor=$C_MUTED; $st.Location=New-Object System.Drawing.Point(430,11)
+        $st=New-Object System.Windows.Forms.Label; $st.Text=$s.State; $st.AutoSize=$false; $st.Size=New-Object System.Drawing.Size(120,20); $st.TextAlign="MiddleRight"; $st.Font=$F_SUB; $st.ForeColor=$C_MUTED; $st.Location=New-Object System.Drawing.Point(420,9)
         $card.Controls.Add($cb); $card.Controls.Add($st); $scroll.Controls.Add($card)
         $checkItems.Add([pscustomobject]@{ Cb=$cb; Group=$g; Title=$s.Title }) | Out-Null
         $y+=42
