@@ -49,11 +49,20 @@ Nessun babysitting. Nessun copia-incolla del contesto. Solo lavoro che si comple
 - 🔒 **Sicuro di default** — fa il backup del tuo `settings.json` prima di toccarlo.
 - 🪶 **Leggerissimo** — puro Bash. Niente Node, niente Python, niente daemon eterni.
 
+## Usi l'APP DESKTOP di Claude (non il terminale)?
+
+Il wrapper e lo Stop hook valgono per la **CLI** da terminale. Se invece usi
+l'**app desktop Claude / Cowork** (Microsoft Store), lo Stop hook non scatta sul
+limite di utilizzo. Per quel caso c'è una soluzione dedicata in **[`windows/`](windows/README.md)**:
+un tasto **"Continua il lavoro"** sul desktop (lo premi tu quando i crediti
+tornano) che clicca al posto tuo, più un watcher automatico opt-in. Usa la UI
+Automation di Windows e non tocca mai nulla che spenda denaro.
+
 ## Requisiti
 
 - [Claude Code](https://claude.ai/code) (`claude` nel PATH)
 - `bash`, `grep`, `sed` (già presenti su macOS/Linux)
-- Windows: usalo dentro **WSL**
+- Windows: usalo dentro **WSL** o **Git Bash** (per l'app desktop vedi [`windows/`](windows/README.md))
 
 ## Installazione
 
