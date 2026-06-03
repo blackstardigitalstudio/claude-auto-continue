@@ -110,10 +110,18 @@ Claude Code emette un evento **Stop** ogni volta che una sessione termina.
 `claude-ac` lo intercetta, distingue uno stop da limite di utilizzo da una
 normale conclusione, e rilancia la sessione quando la quota torna disponibile.
 
+## Feedback, domande e consigli
+
+C'è un canale sempre aperto per parlare con noi:
+
+- 💬 **[Discussions](https://github.com/blackstardigitalstudio/claude-auto-continue/discussions)** — domande, idee, consigli (Q&A).
+- 🐞 **[Issues](https://github.com/blackstardigitalstudio/claude-auto-continue/issues)** — segnala un bug o chiedi una funzionalità.
+
+Ogni segnalazione e ogni consiglio sono benvenuti: aiutano a migliorare il tool.
+
 ## Contribuire
 
-Issue e pull request sono benvenute. Trovi un template per le segnalazioni in
-`.github/ISSUE_TEMPLATE/`.
+Issue e pull request sono benvenute. Trovi i template in `.github/ISSUE_TEMPLATE/`.
 
 ## Licenza
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Domande, idee e consigli (Discussions)
+    url: https://github.com/blackstardigitalstudio/claude-auto-continue/discussions
+    about: Canale Q&A sempre aperto. Fai domande, proponi miglioramenti, lascia un consiglio.
+  - name: ☕ Offri un caffè (sostieni il progetto)
+    url: https://www.paypal.me/REPLACE_ME
+    about: Se il tool ti ha salvato del lavoro, puoi offrire un caffè e aiutarmi a portare avanti gli aggiornamenti.
