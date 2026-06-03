@@ -25,14 +25,19 @@ tasto stesso):
 
 Senza questo permesso macOS blocca i clic automatici.
 
-## Tasto "Continua il lavoro" — lo premi tu
+## Tasti sul Desktop — li premi tu
 
 ```bash
 bash mac/make-shortcut-mac.sh
 ```
 
-Crea sul Desktop **"Continua il lavoro - Claude.command"**: quando i crediti
-tornano, doppio clic e Claude riprende. Per rimuoverlo:
+Crea sul Desktop due tasti `.command`:
+- **"Continua il lavoro - Claude"** — riprende le sessioni bloccate.
+- **"Scegli sessioni - Claude"** — check-up: elenca le sessioni (Chat/Cowork/Code)
+  e ti fa scegliere quali riprendere (selezione multipla).
+
+Dopo una ripresa compare anche **"Offrimi un caffe'"** (PayPal), con opzione
+"Non chiedermelo piu'". Per rimuovere i tasti:
 
 ```bash
 bash mac/make-shortcut-mac.sh --uninstall
@@ -52,7 +57,8 @@ bash mac/resume-now.sh
 | File | Cosa fa |
 |------|---------|
 | `resume-now.sh` | Azione: clicca i pulsanti sicuri di ripresa (il "tasto"). |
-| `make-shortcut-mac.sh` | Crea il tasto `.command` sul Desktop. |
+| `resume-picker.sh` | Check-up: lista delle sessioni (Chat/Cowork/Code), scegli quali riprendere. |
+| `make-shortcut-mac.sh` | Crea i due tasti `.command` sul Desktop. |
 
 ## Note
 
