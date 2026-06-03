@@ -19,16 +19,25 @@ denaro o cambi piano (Acquista crediti, Passa a Max, Aggiorna piano).
 
 ---
 
-## 1) Tasto "Continua il lavoro" (consigliato) — lo premi tu
+## 1) Tasti sul desktop (consigliato) — li premi tu
 
-Un'icona sul desktop: quando i crediti tornano, la premi e lei clicca "Continua a
-lavorare" al posto tuo.
-
-Crea l'icona:
+Crea le icone:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\make-shortcut.ps1
 ```
+
+Ne ottieni due:
+
+- **"Continua il lavoro - Claude"** — riprende **tutte** le sessioni bloccate.
+- **"Scegli sessioni - Claude"** — apre un **check-up con lista a spunta**: vedi
+  le sessioni, spunti solo quelle che ti interessano (le chat vecchie che non usi
+  restano ferme), poi "Riprendi selezionate". C'è anche "Rileva bloccate" che
+  spunta da solo quelle davvero ferme per il limite, e "Ricorda la selezione".
+
+  > Nota: il check-up elenca le sessioni mostrate nella **vista attiva** (Cowork
+  > o Code) della barra laterale. Per includere le sessioni Code, passa prima
+  > alla scheda Code e poi apri il check-up.
 
 Oppure esegui direttamente l'azione (utile per provarla):
 
@@ -71,8 +80,9 @@ Log: `%USERPROFILE%\.cache\claude-ac\resume-watcher.log`
 
 | File | Cosa fa |
 |------|---------|
-| `resume-now.ps1` | Azione one-shot: clicca il pulsante di ripresa (il "tasto"). |
-| `make-shortcut.ps1` | Crea l'icona "Continua il lavoro - Claude" sul desktop. |
+| `resume-now.ps1` | Riprende tutte le sessioni bloccate (il "tasto"). `-Single` per la sola sessione aperta. |
+| `resume-picker.ps1` | Check-up: lista a spunta delle sessioni, riprendi solo le selezionate. |
+| `make-shortcut.ps1` | Crea le due icone sul desktop ("Continua il lavoro" e "Scegli sessioni"). |
 | `resume-watcher.ps1` | Sorvegliante: rileva limite → attende reset → clicca. |
 | `install-watcher.ps1` | Registra/rimuove il watcher come attività pianificata. |
 

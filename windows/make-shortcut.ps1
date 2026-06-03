@@ -17,19 +17,23 @@ param([switch]$Uninstall)
 
 $ErrorActionPreference = 'Stop'
 $InstallDir = Join-Path $env:LOCALAPPDATA 'claude-ac'
-$Target     = Join-Path $InstallDir 'resume-now.ps1'
 $Desktop    = [Environment]::GetFolderPath('Desktop')
-$LnkPath    = Join-Path $Desktop 'Continua il lavoro - Claude.lnk'
+
+# Due icone: il tasto "riprendi tutto" e il check-up con lista a spunta.
+$Shortcuts = @(
+    @{ Script = 'resume-now.ps1';    Lnk = 'Continua il lavoro - Claude.lnk'; Desc = 'Premi quando i crediti tornano: riprende tutte le sessioni Claude. Made in Italy.' },
+    @{ Script = 'resume-picker.ps1'; Lnk = 'Scegli sessioni - Claude.lnk';    Desc = 'Check-up: scegli quali sessioni Claude riprendere. Made in Italy.' }
+)
 
 if ($Uninstall) {
-    if (Test-Path $LnkPath) { Remove-Item $LnkPath -Force; Write-Host "Icona rimossa." }
-    else { Write-Host "Nessuna icona da rimuovere." }
+    foreach ($s in $Shortcuts) {
+        $p = Join-Path $Desktop $s.Lnk
+        if (Test-Path $p) { Remove-Item $p -Force; Write-Host "Rimossa: $($s.Lnk)" }
+    }
     return
 }
 
-# copia resume-now.ps1 in cartella stabile
 if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null }
-Copy-Item -Path (Join-Path $PSScriptRoot 'resume-now.ps1') -Destination $Target -Force
 
 # icona dell'app Claude, se disponibile
 $claudeExe = (Get-Process claude -ErrorAction SilentlyContinue |
@@ -37,15 +41,21 @@ $claudeExe = (Get-Process claude -ErrorAction SilentlyContinue |
 $icon = if ($claudeExe) { "$claudeExe,0" } else { "powershell.exe,0" }
 
 $ws = New-Object -ComObject WScript.Shell
-$sc = $ws.CreateShortcut($LnkPath)
-$sc.TargetPath       = (Get-Command powershell.exe).Source
-$sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Target`""
-$sc.WorkingDirectory = $InstallDir
-$sc.IconLocation     = $icon
-$sc.Description       = "Premi quando i crediti tornano: riprende la sessione Claude. Made in Italy."
-$sc.Save()
+foreach ($s in $Shortcuts) {
+    $target = Join-Path $InstallDir $s.Script
+    Copy-Item -Path (Join-Path $PSScriptRoot $s.Script) -Destination $target -Force
+    $lnkPath = Join-Path $Desktop $s.Lnk
+    $sc = $ws.CreateShortcut($lnkPath)
+    $sc.TargetPath       = (Get-Command powershell.exe).Source
+    $sc.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$target`""
+    $sc.WorkingDirectory = $InstallDir
+    $sc.IconLocation     = $icon
+    $sc.Description       = $s.Desc
+    $sc.Save()
+    Write-Host "Icona creata: $lnkPath"
+}
 
-Write-Host "Fatto! Icona creata sul desktop:"
-Write-Host "  $LnkPath"
 Write-Host ""
-Write-Host "Quando i crediti tornano, fai doppio clic sull'icona e Claude riprende."
+Write-Host "Fatto! Sul desktop trovi due icone:"
+Write-Host "  - 'Continua il lavoro - Claude' : riprende tutte le sessioni"
+Write-Host "  - 'Scegli sessioni - Claude'    : check-up con lista a spunta"
