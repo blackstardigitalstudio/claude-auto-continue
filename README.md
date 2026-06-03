@@ -22,6 +22,14 @@ automatica). Funziona con l'**app desktop di Claude** (Windows e macOS) e con la
 
 </div>
 
+<div align="center">
+
+![claude-ac demo](claude-ac-demo.gif)
+
+*La sessione si ferma al limite di utilizzo… e riparte da sola.*
+
+</div>
+
 ---
 
 ## Il problema

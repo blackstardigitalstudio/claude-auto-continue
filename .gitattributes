@@ -9,3 +9,4 @@ hooks/*.sh  text eol=lf
 *.png       binary
 *.ico       binary
 *.exe       binary
+*.gif       binary
