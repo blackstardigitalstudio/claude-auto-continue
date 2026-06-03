@@ -84,6 +84,23 @@ end tell
 
 if clicked > 0 then
 	display notification ("Ho ripreso " & clicked & " sessione/i.") with title "Claude: lavoro ripreso!"
+	-- "Offrimi un caffe'" (a meno che disattivato con il flag)
+	set flagFile to (POSIX path of (path to home folder)) & ".local/share/claude-ac/.no-coffee"
+	set showCoffee to true
+	try
+		do shell script "test -f " & quoted form of flagFile
+		set showCoffee to false
+	end try
+	if showCoffee then
+		try
+			set r to button returned of (display dialog "Se claude-ac ti ha salvato del lavoro, offrimi un caffe': mi aiuti a portare avanti aggiornamenti e migliorie." with title "Grazie!" buttons {"Non chiedermelo piu'", "No grazie", "Offrimi un caffe'"} default button 3)
+			if r is "Offrimi un caffe'" then
+				open location "https://www.paypal.me/messylove23"
+			else if r is "Non chiedermelo piu'" then
+				do shell script "mkdir -p " & quoted form of ((POSIX path of (path to home folder)) & ".local/share/claude-ac") & " ; touch " & quoted form of flagFile
+			end if
+		end try
+	end if
 else
 	display notification "Nessuna sessione bloccata dal limite ora." with title "Niente da riprendere"
 end if

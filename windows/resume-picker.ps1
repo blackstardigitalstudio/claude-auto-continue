@@ -126,6 +126,28 @@ function Test-Blocked($group,$title){
 }
 function Toast($t,$x){ try{ $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; $n.ShowBalloonTip(6000,$t,$x,'Info'); Start-Sleep -Milliseconds 6500; $n.Dispose() }catch{} }
 
+# "Offrimi un caffe'": compare dopo una ripresa riuscita (a meno che disattivato).
+function Show-Coffee {
+    $PAYPAL_URL="https://www.paypal.me/messylove23"
+    $flag=Join-Path $env:LOCALAPPDATA 'claude-ac\no-coffee.flag'
+    if(Test-Path $flag){ return }
+    $dark=[System.Drawing.Color]::FromArgb(17,21,28); $accent=[System.Drawing.Color]::FromArgb(0,146,70)
+    $tFont=New-Object System.Drawing.Font("Segoe UI",15,[System.Drawing.FontStyle]::Bold)
+    $bFont=New-Object System.Drawing.Font("Segoe UI",9.5,[System.Drawing.FontStyle]::Bold)
+    $cf=New-Object System.Windows.Forms.Form
+    $cf.Text="Grazie!"; $cf.ClientSize=New-Object System.Drawing.Size(430,222); $cf.StartPosition="CenterScreen"; $cf.TopMost=$true
+    $cf.FormBorderStyle="FixedSingle"; $cf.MaximizeBox=$false; $cf.MinimizeBox=$false; $cf.BackColor=[System.Drawing.Color]::White
+    $hd=New-Object System.Windows.Forms.Panel; $hd.Dock="Top"; $hd.Height=62; $hd.BackColor=$dark; $cf.Controls.Add($hd)
+    $tl=New-Object System.Windows.Forms.Label; $tl.Text="Ti e' servito?"; $tl.ForeColor=[System.Drawing.Color]::White; $tl.Font=$tFont; $tl.AutoSize=$true; $tl.Location=New-Object System.Drawing.Point(18,15); $hd.Controls.Add($tl)
+    $msg=New-Object System.Windows.Forms.Label; $msg.Text="Se claude-ac ti ha salvato del lavoro, offrimi un caffe':`nmi aiuti a portare avanti aggiornamenti e migliorie."; $msg.AutoSize=$false; $msg.Size=New-Object System.Drawing.Size(394,54); $msg.Location=New-Object System.Drawing.Point(18,76); $cf.Controls.Add($msg)
+    $chk=New-Object System.Windows.Forms.CheckBox; $chk.Text="Non chiedermelo piu'"; $chk.AutoSize=$true; $chk.Location=New-Object System.Drawing.Point(18,140); $chk.ForeColor=[System.Drawing.Color]::Gray; $cf.Controls.Add($chk)
+    $pay=New-Object System.Windows.Forms.Button; $pay.Text="Offrimi un caffe' (PayPal)"; $pay.Font=$bFont; $pay.FlatStyle="Flat"; $pay.FlatAppearance.BorderSize=0; $pay.BackColor=$accent; $pay.ForeColor=[System.Drawing.Color]::White; $pay.Size=New-Object System.Drawing.Size(206,40); $pay.Location=New-Object System.Drawing.Point(206,168); $pay.Cursor="Hand"; $cf.Controls.Add($pay)
+    $no=New-Object System.Windows.Forms.Button; $no.Text="No, grazie"; $no.Font=$bFont; $no.FlatStyle="Flat"; $no.FlatAppearance.BorderSize=0; $no.BackColor=[System.Drawing.Color]::FromArgb(238,240,243); $no.ForeColor=$dark; $no.Size=New-Object System.Drawing.Size(110,40); $no.Location=New-Object System.Drawing.Point(88,168); $no.Cursor="Hand"; $cf.Controls.Add($no)
+    $pay.Add_Click({ try{ Start-Process $PAYPAL_URL }catch{}; if($chk.Checked){ New-Item -ItemType File -Path $flag -Force | Out-Null }; $cf.Close() })
+    $no.Add_Click({ if($chk.Checked){ New-Item -ItemType File -Path $flag -Force | Out-Null }; $cf.Close() })
+    [void]$cf.ShowDialog()
+}
+
 # ----------------------------------------------------------------------------
 $win = Get-ClaudeWindow
 if(-not $win){ Toast "Claude non trovato" "L'app desktop Claude non risulta aperta."; return }
@@ -267,3 +289,4 @@ if($chosen.Count -eq 0){ Toast "Nessuna selezione" "Non hai selezionato sessioni
 
 $ok=0; foreach($c in $chosen){ try{ if(Resume-One $c.Group $c.Title){ $ok++ } }catch{} }
 Toast "Claude: ripresa completata" ("Riprese {0} di {1} sessioni selezionate." -f $ok,$chosen.Count)
+if($ok -gt 0){ Show-Coffee }
