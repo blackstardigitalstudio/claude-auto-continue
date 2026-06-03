@@ -10,7 +10,7 @@ description: >-
 
 # claude-ac — Auto-Continue for Claude Code
 
-**Made in Italy** | v1.1.1 | MIT
+**Made in Italy** | v1.2.0 | MIT
 
 ## What this skill does
 

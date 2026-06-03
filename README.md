@@ -53,10 +53,13 @@ Nessun babysitting. Nessun copia-incolla del contesto. Solo lavoro che si comple
 
 Il wrapper e lo Stop hook valgono per la **CLI** da terminale. Se invece usi
 l'**app desktop Claude / Cowork** (Microsoft Store), lo Stop hook non scatta sul
-limite di utilizzo. Per quel caso c'è una soluzione dedicata in **[`windows/`](windows/README.md)**:
-un tasto **"Continua il lavoro"** sul desktop (lo premi tu quando i crediti
-tornano) che clicca al posto tuo, più un watcher automatico opt-in. Usa la UI
-Automation di Windows e non tocca mai nulla che spenda denaro.
+limite di utilizzo. Per quel caso c'è una soluzione dedicata: un tasto **"Continua il lavoro"** sul
+desktop (lo premi tu quando i crediti tornano) che clicca al posto tuo e riprende
+**tutte** le sessioni bloccate, più un watcher automatico opt-in. Non tocca mai
+nulla che spenda denaro.
+
+- 🪟 **Windows** → [`windows/`](windows/README.md) (UI Automation)
+- 🍎 **macOS** → [`mac/`](mac/README.md) (Accessibility API)
 
 ## Requisiti
 
