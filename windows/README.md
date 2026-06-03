@@ -76,6 +76,23 @@ Log: `%USERPROFILE%\.cache\claude-ac\resume-watcher.log`
 
 ---
 
+## Preferisci un .exe?
+
+Puoi usare il tool in due modi (a tua scelta):
+
+- **Script + icone** (consigliato): leggero, trasparente, facile da aggiornare.
+- **.exe**: genera due eseguibili con l'icona incorporata (`Continua il lavoro.exe`,
+  `Scegli sessioni.exe`) che avviano gli script affiancati:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File windows\make-icon.ps1   # crea l'icona
+  powershell -ExecutionPolicy Bypass -File windows\build-exe.ps1    # crea i due .exe
+  ```
+
+  Nota: alla prima apertura Windows SmartScreen puo' mostrare un avviso perche'
+  l'eseguibile non e' firmato. E' un launcher trasparente (apre lo script
+  PowerShell affiancato): clicca "Ulteriori informazioni" > "Esegui comunque".
+
 ## File
 
 | File | Cosa fa |

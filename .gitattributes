@@ -7,3 +7,5 @@ hooks/*.sh  text eol=lf
 *.txt       text eol=lf
 *.yml       text eol=lf
 *.png       binary
+*.ico       binary
+*.exe       binary
