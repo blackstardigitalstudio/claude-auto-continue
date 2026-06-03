@@ -2,16 +2,17 @@
 
 <img src="https://raw.githubusercontent.com/blackstardigitalstudio/claude-auto-continue/main/banner.png" alt="claude-ac — Auto-Continue per Claude Code" width="100%">
 
-# ☕ claude-ac — Auto-Continue per Claude Code
+# ☕ claude-ac — Auto-Continue per Claude (app desktop & CLI)
 
 ### Non perdere mai più i tuoi progressi per colpa dei limiti di utilizzo.
 
-La tua sessione di Claude Code si ferma al limite — e **riparte da sola** appena la quota si resetta.
-Tu lanci il lavoro una volta. Lui lo finisce mentre tu vivi.
+Quando finisci i crediti, **claude-ac fa ripartire il lavoro**: con un clic quando ti
+torna comodo, oppure **da solo** appena la quota si resetta (se attivi la ripresa
+automatica). Funziona con l'**app desktop di Claude** (Windows e macOS) e con la **CLI**.
 
 [![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-green.svg)](LICENSE)
-[![Bash](https://img.shields.io/badge/scritto%20in-Bash-1f425f.svg)](#)
-[![Piattaforme](https://img.shields.io/badge/piattaforme-macOS%20%7C%20Linux%20%7C%20WSL-blue.svg)](#)
+[![Linguaggi](https://img.shields.io/badge/PowerShell%20%2B%20Bash-1f425f.svg)](#)
+[![Piattaforme](https://img.shields.io/badge/piattaforme-Windows%20%7C%20macOS%20%7C%20Linux-blue.svg)](#)
 [![Made in Italy](https://img.shields.io/badge/Made%20in-Italy%20%F0%9F%87%AE%F0%9F%87%B9-008C45.svg)](#)
 [![PR benvenute](https://img.shields.io/badge/PR-benvenute-brightgreen.svg)](#contribuire)
 
@@ -25,99 +26,122 @@ Tu lanci il lavoro una volta. Lui lo finisce mentre tu vivi.
 
 ## Il problema
 
-Sei nel pieno di un lavoro lungo con Claude Code. Sta andando alla grande.
+Sei nel pieno di un lavoro lungo con Claude. Sta andando alla grande.
 Poi colpisci il limite di utilizzo: la sessione si ferma, lo slancio muore.
-Torni ore dopo, rispieghi tutto il contesto e speri di riprendere da dove eri.
+Torni ore dopo e devi rimetterti lì a far ripartire tutto a mano.
 
 Tempo perso. Concentrazione persa. Lavoro a metà.
 
 ## La soluzione
 
-`claude-ac` avvolge Claude Code e registra uno **Stop hook** ufficiale.
-Quando una sessione si ferma per il limite di utilizzo, lo rileva, aspetta che
-la quota si resetti e **riprende automaticamente la stessa sessione** — esatto,
-proprio da dove si era interrotta.
+Quando colpisci il limite, `claude-ac` riprende il lavoro per te. **Tre modi, scegli il tuo:**
 
-Nessun babysitting. Nessun copia-incolla del contesto. Solo lavoro che si completa.
+- 🖱️ **Manuale (un clic)** — quando i crediti tornano, premi il tasto **"Continua il
+  lavoro"** e le sessioni bloccate ripartono. Oppure usa il check-up **"Scegli
+  sessioni"** per riattivare solo quelle che ti interessano.
+- 🤖 **Automatico (opt-in)** — attivi la **ripresa automatica** e `claude-ac` fa la
+  guardia: aspetta il reset della quota e **riparte da solo**, senza che tu prema niente.
+- ⌨️ **Da terminale** — il wrapper `claude-ac` avvolge la CLI di Claude Code, riconosce
+  il limite nell'output, aspetta il reset e riprova in automatico.
+
+Nessun copia-incolla del contesto. Solo lavoro che si completa.
 
 ## Cosa lo rende diverso
 
-- ⚡ **Ripresa automatica al limite** — rileva lo stop da quota e continua al reset.
-- 🧠 **Zero supervisione** — lancia un task lungo, vai a vivere, torni a lavoro finito.
-- 🔌 **Integrazione nativa** — usa lo Stop hook ufficiale di Claude Code, non un trucco.
-- 🛠️ **Installazione in un comando** — configura tutto, hook compreso.
-- 🔒 **Sicuro di default** — fa il backup del tuo `settings.json` prima di toccarlo.
-- 🪶 **Leggerissimo** — puro Bash. Niente Node, niente Python, niente daemon eterni.
+- ⚡ **Ripresa al limite** — con un clic, o automatica appena i crediti tornano.
+- 🗂️ **Scegli cosa riprendere** — il check-up elenca le sessioni divise per **Chat /
+  Cowork / Code**: riattivi solo le chat giuste, le altre restano ferme.
+- 🖥️ **App desktop *e* terminale** — Windows (UI Automation), macOS (Accessibility), CLI (Bash).
+- 🔒 **Non spende mai soldi** — clicca solo i pulsanti di ripresa, mai acquisti o upgrade.
+- 🛡️ **Niente porte aperte, niente backdoor, niente telemetria** — codice locale e leggibile.
+- 🪶 **Leggero** — semplici script (PowerShell / Bash). Nessun daemon eterno, a meno che tu non scelga la modalità automatica.
 
-## Usi l'APP DESKTOP di Claude (non il terminale)?
+## Piattaforme
 
-Il wrapper e lo Stop hook valgono per la **CLI** da terminale. Se invece usi
-l'**app desktop Claude / Cowork** (Microsoft Store), lo Stop hook non scatta sul
-limite di utilizzo. Per quel caso c'è una soluzione dedicata: un tasto **"Continua il lavoro"** sul
-desktop (lo premi tu quando i crediti tornano) che clicca al posto tuo e riprende
-**tutte** le sessioni bloccate, più un watcher automatico opt-in. Non tocca mai
-nulla che spenda denaro.
-
-- 🪟 **Windows** → [`windows/`](windows/README.md) (UI Automation)
-- 🍎 **macOS** → [`mac/`](mac/README.md) (Accessibility API)
-
-## Requisiti
-
-- [Claude Code](https://claude.ai/code) (`claude` nel PATH)
-- `bash`, `grep`, `sed` (già presenti su macOS/Linux)
-- Windows: usalo dentro **WSL** o **Git Bash** (per l'app desktop vedi [`windows/`](windows/README.md))
+| | Come |
+|---|---|
+| 🪟 **Windows** (app desktop) | UI Automation → [`windows/`](windows/README.md) |
+| 🍎 **macOS** (app desktop) | Accessibility API → [`mac/`](mac/README.md) |
+| ⌨️ **CLI** (macOS / Linux / WSL / Git Bash) | wrapper Bash → [`install.sh`](install.sh) |
 
 ## Installazione
+
+### App desktop — Windows
+
+```powershell
+git clone https://github.com/blackstardigitalstudio/claude-auto-continue.git
+cd claude-auto-continue
+powershell -ExecutionPolicy Bypass -File windows\make-shortcut.ps1
+```
+
+Crea sul Desktop due tasti: **"Continua il lavoro"** (riprende tutto) e **"Scegli
+sessioni"** (check-up con lista). Preferisci un `.exe`? Vedi [`windows/`](windows/README.md).
+Vuoi la **ripresa automatica** (opt-in)? `powershell -ExecutionPolicy Bypass -File windows\install-watcher.ps1`.
+
+### App desktop — macOS
 
 ```bash
 git clone https://github.com/blackstardigitalstudio/claude-auto-continue.git
 cd claude-auto-continue
-./install.sh            # installazione utente (~/.local/bin)
+bash mac/make-shortcut-mac.sh
 ```
 
-Altre opzioni:
+Crea sul Desktop i due tasti `.command`. La prima volta concedi l'accesso
+**Accessibilità** al Terminale (Impostazioni di Sistema → Privacy e Sicurezza →
+Accessibilità). Dettagli in [`mac/`](mac/README.md).
+
+### Terminale (CLI)
 
 ```bash
-./install.sh --system     # installazione di sistema (/usr/local/bin, richiede sudo)
-./install.sh --uninstall  # rimuove tutto
+git clone https://github.com/blackstardigitalstudio/claude-auto-continue.git
+cd claude-auto-continue && ./install.sh
+claude-ac "costruiscimi una todo app"
 ```
-
-L'installer controlla le dipendenze, copia i file e registra lo Stop hook in
-`~/.claude/settings.json` (facendo prima un backup di eventuali impostazioni).
 
 ## Uso
 
+**App desktop:** quando vedi "Limite di utilizzo raggiunto" e poi i crediti tornano,
+lascia aperta l'app Claude e fai doppio clic su **"Continua il lavoro"** (riprende
+tutto) oppure su **"Scegli sessioni"** (scegli quali riattivare). In modalità
+automatica non devi fare nulla: riparte da solo.
+
+**CLI:**
+
 ```bash
-claude-ac "costruiscimi una todo app"   # avvia un task con auto-continue
+claude-ac "scrivi i test per main.py"   # avvia con auto-continue
 claude-ac --continue                    # riprende l'ultima sessione
 claude-ac --ac-help                     # tutte le opzioni
 ```
 
-Quando Claude Code colpisce il limite, `claude-ac` prende il comando: aspetta il
-reset e riprende la sessione automaticamente.
-
 ## Come funziona
 
-```
-Lanci un task ─▶ Claude Code lavora ─▶ limite raggiunto ─▶ la sessione si ferma
-                                                                │
-                          parte lo Stop hook (hooks/stop.sh) ◀──┘
-                                       │
-            rileva il limite ─▶ aspetta il reset ─▶ riprende la sessione ─▶ fatto
-```
+- **App desktop** — `claude-ac` trova la finestra di Claude e clicca il vero pulsante
+  **"Continua a lavorare"** tramite la **UI Automation di Windows** / la **Accessibility
+  API di macOS** (la stessa tecnologia dei lettori di schermo). In modalità automatica
+  un sorvegliante controlla a intervalli e clicca da solo appena la quota torna.
+- **CLI** — il wrapper esegue `claude`, legge l'output, riconosce il messaggio di limite,
+  aspetta il reset e rilancia con `--continue`.
 
-Claude Code emette un evento **Stop** ogni volta che una sessione termina.
-`claude-ac` lo intercetta, distingue uno stop da limite di utilizzo da una
-normale conclusione, e rilancia la sessione quando la quota torna disponibile.
+> **Nota tecnica (onestà):** quando finiscono i crediti, Claude **non** emette un evento
+> "Stop", quindi sull'app desktop la ripresa avviene via UI Automation (non tramite hook).
+> È il motivo per cui esistono il tasto e la modalità automatica.
+
+**Sicurezza:** nessun listener, nessuna porta aperta, nessun download di codice, nessuna
+telemetria. L'unica connessione a internet è l'apertura della pagina PayPal nel browser,
+**solo se** clicchi "Offrimi un caffè".
+
+## ☕ Offrimi un caffè
+
+Se `claude-ac` ti ha salvato del lavoro, puoi sostenere gli aggiornamenti:
+**[paypal.me/messylove23](https://www.paypal.me/messylove23)** — oppure il bottone
+**Sponsor** in cima al repository. Grazie! 🙏
 
 ## Feedback, domande e consigli
 
-C'è un canale sempre aperto per parlare con noi:
+C'è un canale sempre aperto:
 
 - 💬 **[Discussions](https://github.com/blackstardigitalstudio/claude-auto-continue/discussions)** — domande, idee, consigli (Q&A).
 - 🐞 **[Issues](https://github.com/blackstardigitalstudio/claude-auto-continue/issues)** — segnala un bug o chiedi una funzionalità.
-
-Ogni segnalazione e ogni consiglio sono benvenuti: aiutano a migliorare il tool.
 
 ## Contribuire
 
@@ -133,17 +157,53 @@ Issue e pull request sono benvenute. Trovi i template in `.github/ISSUE_TEMPLATE
 
 ## 🇬🇧 English
 
-**claude-ac — Auto-Continue for Claude Code.** Never lose progress to usage
-limits again. `claude-ac` wraps Claude Code and registers the official **Stop
-hook**: when a session stops because of a usage limit, it waits for your quota
-to reset and **automatically resumes the same session**, right where it left
-off. Pure Bash, macOS / Linux / WSL, MIT licensed.
+# claude-ac — Auto-Continue for Claude (desktop app & CLI)
+
+**Never lose progress to usage limits again.** When you hit your limit, `claude-ac`
+gets your work going again — with one click when it suits you, or **automatically**
+as soon as your quota resets (if you enable auto-resume). Works with the **Claude
+desktop app** (Windows & macOS) and with the **CLI**.
+
+### Three ways to use it
+
+- 🖱️ **Manual (one click)** — when credits are back, press the **"Continua il lavoro"**
+  (Resume work) button and the blocked sessions restart. Or use the **"Scegli sessioni"**
+  (Pick sessions) check-up to resume only the ones you want.
+- 🤖 **Automatic (opt-in)** — enable auto-resume and `claude-ac` watches, waits for the
+  reset and **resumes by itself**, no clicking needed.
+- ⌨️ **Terminal** — the `claude-ac` wrapper wraps the Claude Code CLI, detects the limit
+  in the output, waits for the reset and retries with `--continue`.
+
+### How it works
+
+- **Desktop app** — `claude-ac` finds the Claude window and clicks the real
+  **"Continua a lavorare"** button through **Windows UI Automation** / the **macOS
+  Accessibility API**. In automatic mode a small watcher clicks it for you as soon as the
+  quota returns.
+- **CLI** — the wrapper runs `claude`, reads the output, recognizes the limit message and
+  relaunches at reset.
+
+> **Honest note:** Claude does **not** emit a "Stop" event when you run out of credits,
+> so on the desktop app the resume is done via UI Automation (not via a hook). That's why
+> the button and the automatic mode exist.
+
+**Safety:** no listeners, no open ports, no code downloads, no telemetry. The only internet
+action is opening the PayPal page in your browser — **only if** you click "Buy me a coffee".
+
+### Install (quick)
 
 ```bash
-git clone https://github.com/blackstardigitalstudio/claude-auto-continue.git
-cd claude-auto-continue && ./install.sh
-claude-ac "build me a todo app"
+# Windows desktop app
+powershell -ExecutionPolicy Bypass -File windows\make-shortcut.ps1
+# macOS desktop app
+bash mac/make-shortcut-mac.sh
+# CLI
+./install.sh
 ```
+
+Platforms: Windows / macOS (desktop app) and macOS / Linux / WSL / Git Bash (CLI). MIT licensed.
+If it saves you a session, a ⭐ helps others find it — and you can support updates at
+[paypal.me/messylove23](https://www.paypal.me/messylove23).
 
 ---
 
