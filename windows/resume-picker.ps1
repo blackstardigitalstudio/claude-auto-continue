@@ -126,11 +126,48 @@ function Test-Blocked($group,$title){
 }
 function Toast($t,$x){ try{ $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; $n.ShowBalloonTip(6000,$t,$x,'Info'); Start-Sleep -Milliseconds 6500; $n.Dispose() }catch{} }
 
-# "Offrimi un caffe'": compare dopo una ripresa riuscita (a meno che disattivato).
+# --- Attesa "reset + 30s" ----------------------------------------------------
+function Get-WindowText($win){
+    if(-not $win){return ""}
+    $tc=New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty,[System.Windows.Automation.ControlType]::Text)
+    $sb=New-Object System.Text.StringBuilder
+    foreach($t in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants,$tc)){ [void]$sb.AppendLine($t.Current.Name) }
+    return $sb.ToString()
+}
+function Parse-ResetTime([string]$text){
+    $m=[regex]::Match($text,'(?i)(?:ripristina|ripristino|reimposta|azzera|reset)\D{0,20}(\d{1,2}):(\d{2})')
+    if(-not $m.Success){return $null}
+    $h=[int]$m.Groups[1].Value; $min=[int]$m.Groups[2].Value
+    $now=Get-Date; $t=Get-Date -Hour $h -Minute $min -Second 0
+    if($t -lt $now.AddMinutes(-5)){ $t=$t.AddDays(1) }
+    return $t
+}
+# Se c'e' un'ora di reset futura, aspetta fino a (reset + 30s) prima di cliccare.
+# Se il reset e' gia' passato -> clicca subito (niente attesa, niente rollover a domani).
+function Wait-UntilResetPlus30($win){
+    $text=Get-WindowText $win
+    $m=[regex]::Match($text,'(?i)(?:ripristina|ripristino|reimposta|azzera|reset)\D{0,20}(\d{1,2}):(\d{2})')
+    if(-not $m.Success){return}
+    $target=(Get-Date -Hour ([int]$m.Groups[1].Value) -Minute ([int]$m.Groups[2].Value) -Second 0).AddSeconds(30)
+    $now=Get-Date
+    if($now -ge $target){return}
+    if(($target-$now).TotalHours -gt 6){return}
+    $wait=[int]($target-$now).TotalSeconds
+    Toast "Claude: aspetto il reset" ("Riprendo alle {0} (30s dopo i crediti). Non chiudere." -f $target.ToString('HH:mm:ss'))
+    Start-Sleep -Seconds $wait
+}
+
+# "Offrimi un caffe'": MASSIMO UNA VOLTA AL GIORNO (niente spam), disattivabile.
 function Show-Coffee {
     $PAYPAL_URL="https://www.paypal.me/messylove23"
-    $flag=Join-Path $env:LOCALAPPDATA 'claude-ac\no-coffee.flag'
+    $dir=Join-Path $env:LOCALAPPDATA 'claude-ac'
+    $flag=Join-Path $dir 'no-coffee.flag'
+    $daily=Join-Path $dir 'coffee-last.txt'
     if(Test-Path $flag){ return }
+    $today=(Get-Date).ToString('yyyy-MM-dd')
+    if(Test-Path $daily){ try{ if(((Get-Content $daily -Raw) -replace '\s','') -eq $today){ return } }catch{} }
+    if(-not(Test-Path $dir)){ New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    Set-Content -Path $daily -Value $today -Encoding utf8
     $dark=[System.Drawing.Color]::FromArgb(17,21,28); $accent=[System.Drawing.Color]::FromArgb(0,146,70)
     $tFont=New-Object System.Drawing.Font("Segoe UI",15,[System.Drawing.FontStyle]::Bold)
     $bFont=New-Object System.Drawing.Font("Segoe UI",9.5,[System.Drawing.FontStyle]::Bold)
@@ -286,6 +323,9 @@ if($chkRemember.Checked){
 } elseif(Test-Path $PrefFile){ Remove-Item $PrefFile -Force }
 
 if($chosen.Count -eq 0){ Toast "Nessuna selezione" "Non hai selezionato sessioni da riprendere."; return }
+
+# Se l'app mostra un'ora di reset futura, aspetta fino a (reset + 30s): non clicca subito.
+Wait-UntilResetPlus30 (Get-ClaudeWindow)
 
 $ok=0; foreach($c in $chosen){ try{ if(Resume-One $c.Group $c.Title){ $ok++ } }catch{} }
 Toast "Claude: ripresa completata" ("Riprese {0} di {1} sessioni selezionate." -f $ok,$chosen.Count)

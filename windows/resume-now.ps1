@@ -41,11 +41,18 @@ function Toast($title, $text) {
     } catch {}
 }
 
-# "Offrimi un caffe'": compare dopo una ripresa riuscita (a meno che disattivato).
+# "Offrimi un caffe'": compare dopo una ripresa riuscita.
+# MASSIMO UNA VOLTA AL GIORNO (niente spam) e disattivabile per sempre.
 function Show-Coffee {
     $PAYPAL_URL="https://www.paypal.me/messylove23"
-    $flag=Join-Path $env:LOCALAPPDATA 'claude-ac\no-coffee.flag'
+    $dir=Join-Path $env:LOCALAPPDATA 'claude-ac'
+    $flag=Join-Path $dir 'no-coffee.flag'       # disattivato per sempre
+    $daily=Join-Path $dir 'coffee-last.txt'     # data dell'ultima volta mostrato
     if(Test-Path $flag){ return }
+    $today=(Get-Date).ToString('yyyy-MM-dd')
+    if(Test-Path $daily){ try{ if(((Get-Content $daily -Raw) -replace '\s','') -eq $today){ return } }catch{} }
+    if(-not(Test-Path $dir)){ New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    Set-Content -Path $daily -Value $today -Encoding utf8   # registra: gia' mostrato oggi
     $dark=[System.Drawing.Color]::FromArgb(17,21,28); $accent=[System.Drawing.Color]::FromArgb(0,146,70)
     $tFont=New-Object System.Drawing.Font("Segoe UI",15,[System.Drawing.FontStyle]::Bold)
     $bFont=New-Object System.Drawing.Font("Segoe UI",9.5,[System.Drawing.FontStyle]::Bold)
@@ -82,6 +89,41 @@ function Invoke-Element($el) {
     catch {
         try { $p2 = $el.GetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern); $p2.DoDefaultAction(); return $true } catch { return $false }
     }
+}
+
+# Testo della finestra (per leggere l'ora di reset dal banner del limite)
+function Get-WindowText($win) {
+    if (-not $win) { return "" }
+    $txtCond = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($t in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, $txtCond)) { [void]$sb.AppendLine($t.Current.Name) }
+    return $sb.ToString()
+}
+
+# Ora di reset (HH:MM) dal banner ("si ripristina/azzera alle ..."); [datetime] o $null
+function Parse-ResetTime([string]$text) {
+    $m = [regex]::Match($text, '(?i)(?:ripristina|ripristino|reimposta|azzera|reset)\D{0,20}(\d{1,2}):(\d{2})')
+    if (-not $m.Success) { return $null }
+    $h = [int]$m.Groups[1].Value; $min = [int]$m.Groups[2].Value
+    $now = Get-Date
+    $t = Get-Date -Hour $h -Minute $min -Second 0
+    if ($t -lt $now.AddMinutes(-5)) { $t = $t.AddDays(1) }   # ora gia' passata -> domani
+    return $t
+}
+
+# Se c'e' un'ora di reset FUTURA, aspetta fino a (reset + 30s) prima di cliccare.
+# Se il reset e' gia' passato (crediti gia' tornati) -> clicca subito, niente attesa.
+function Wait-UntilResetPlus30($win) {
+    $text = Get-WindowText $win
+    $m = [regex]::Match($text, '(?i)(?:ripristina|ripristino|reimposta|azzera|reset)\D{0,20}(\d{1,2}):(\d{2})')
+    if (-not $m.Success) { return }
+    $target = (Get-Date -Hour ([int]$m.Groups[1].Value) -Minute ([int]$m.Groups[2].Value) -Second 0).AddSeconds(30)
+    $now = Get-Date
+    if ($now -ge $target) { return }                    # reset gia' passato -> clicca subito
+    if (($target - $now).TotalHours -gt 6) { return }   # orario incoerente -> non aspettare ore
+    $wait = [int]($target - $now).TotalSeconds
+    Toast "Claude: aspetto il reset" ("Riprendo alle {0} (30s dopo che tornano i crediti). Non chiudere." -f $target.ToString('HH:mm:ss'))
+    Start-Sleep -Seconds $wait
 }
 
 function Find-ResumeButton($win) {
@@ -140,6 +182,11 @@ function Resume-Current {
 # ============================== AZIONE ====================================
 $win = Get-ClaudeWindow
 if (-not $win) { Toast "Claude non trovato" "L'app desktop Claude non risulta aperta."; Write-Output "App Claude non in esecuzione."; return }
+
+# Se l'app mostra un'ora di reset futura, NON cliccare subito: aspetta fino a
+# (reset + 30s), cioe' 30 secondi dopo che i token sono tornati.
+Wait-UntilResetPlus30 $win
+$win = Get-ClaudeWindow
 
 $resumed = 0
 

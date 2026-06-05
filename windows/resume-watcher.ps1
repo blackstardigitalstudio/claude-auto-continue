@@ -31,7 +31,7 @@ param(
     [switch]$Once,                 # esegue una sola scansione e stampa lo stato
     [switch]$NoClick,              # rileva + notifica ma NON clicca (solo avviso)
     [int]$IntervalSeconds = 60,    # ogni quanto controllare
-    [int]$BufferSeconds = 45       # margine dopo l'ora di reset prima di cliccare
+    [int]$BufferSeconds = 30       # margine dopo l'ora di reset prima di cliccare (30s dopo che tornano i token)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -133,7 +133,7 @@ function Find-ResumeButton($win) {
 
 # Estrae l'ora di reset (HH:MM) dal testo del banner; ritorna [datetime] o $null
 function Parse-ResetTime([string]$text) {
-    $m = [regex]::Match($text, '(?i)(?:ripristina|azzera|reset|ripristino)\D{0,20}(\d{1,2}):(\d{2})')
+    $m = [regex]::Match($text, '(?i)(?:ripristina|ripristino|reimposta|azzera|reset)\D{0,20}(\d{1,2}):(\d{2})')
     if (-not $m.Success) { return $null }
     $h = [int]$m.Groups[1].Value; $min = [int]$m.Groups[2].Value
     $now = Get-Date
