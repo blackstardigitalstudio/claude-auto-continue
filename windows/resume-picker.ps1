@@ -22,7 +22,7 @@
 =============================================================================
 #>
 [CmdletBinding()]
-param([switch]$ListOnly)
+param([switch]$ListOnly, [string]$Message='Continua')
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -111,11 +111,47 @@ function Gather-All {
     }
     return $res
 }
+# Trova la casella di input del messaggio (composer) nella chat aperta.
+function Find-Composer($win){
+    if(-not $win){return $null}
+    foreach($ct in @([System.Windows.Automation.ControlType]::Edit,[System.Windows.Automation.ControlType]::Document)){
+        $c=New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty,$ct)
+        $els=$win.FindAll([System.Windows.Automation.TreeScope]::Descendants,$c)
+        foreach($e in $els){
+            $n=(''+$e.Current.Name).ToLower()
+            if($n -match 'messaggio|message|digita|scrivi|reply|chiedi|comandi'){ return $e }
+        }
+        if($els.Count -gt 0){ return $els[$els.Count-1] }   # fallback: l'ultima casella editabile (il composer e' in basso)
+    }
+    return $null
+}
+
+# Invia un messaggio nella chat aperta per riattivarla (logica del tasto "Continue").
+function Send-ContinueMessage($win,$text){
+    $box=Find-Composer $win
+    if(-not $box){ return $false }
+    try{ $box.SetFocus() }catch{}
+    Start-Sleep -Milliseconds 400
+    $set=$false
+    try{ $vp=$box.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern); if(-not $vp.Current.IsReadOnly){ $vp.SetValue($text); $set=$true } }catch{}
+    if(-not $set){ try{ [System.Windows.Forms.SendKeys]::SendWait($text) }catch{ return $false } }
+    Start-Sleep -Milliseconds 500
+    try{ [System.Windows.Forms.SendKeys]::SendWait("{ENTER}") }catch{}
+    Start-Sleep -Milliseconds 800
+    return $true
+}
+
 function Resume-One($group,$title){
     $win=Get-ClaudeWindow; if(-not $win){return $false}
     [void](Click-Tab $win $group); Start-Sleep -Milliseconds 900; $win=Get-ClaudeWindow
-    if(Open-SessionByTitle $win $title){ Start-Sleep -Milliseconds 1500; $win=Get-ClaudeWindow
-        $btn=Find-ResumeButton $win; if($btn){ if(Invoke-Element $btn){ Start-Sleep -Seconds 2; return $true } } }
+    if(Open-SessionByTitle $win $title){
+        Start-Sleep -Milliseconds 1500; $win=Get-ClaudeWindow
+        # 1) se c'e' il pulsante nativo di ripresa, clicca quello (modo pulito)
+        $btn=Find-ResumeButton $win
+        if($btn){ if(Invoke-Element $btn){ Start-Sleep -Seconds 2; return $true } }
+        # 2) altrimenti invia un messaggio ("Continua") per riattivare la conversazione
+        if(Send-ContinueMessage $win $Message){ Start-Sleep -Seconds 1; return $true }
+    }
     return $false
 }
 function Test-Blocked($group,$title){
@@ -260,7 +296,7 @@ $bar0=New-Object System.Windows.Forms.Panel; $bar0.Size=New-Object System.Drawin
 $bar1=New-Object System.Windows.Forms.Panel; $bar1.Size=New-Object System.Drawing.Size(8,14); $bar1.Location=New-Object System.Drawing.Point(8,0); $bar1.BackColor=[System.Drawing.Color]::White; $flag.Controls.Add($bar1)
 $bar2=New-Object System.Windows.Forms.Panel; $bar2.Size=New-Object System.Drawing.Size(9,14); $bar2.Location=New-Object System.Drawing.Point(16,0); $bar2.BackColor=$C_RED; $flag.Controls.Add($bar2)
 
-$btnGo=New-StyledButton "Riprendi selezionate" $true; $btnGo.Size=New-Object System.Drawing.Size(190,38); $btnGo.Location=New-Object System.Drawing.Point(($CW-20-190),80); $footer.Controls.Add($btnGo)
+$btnGo=New-StyledButton "Continua selezionate" $true; $btnGo.Size=New-Object System.Drawing.Size(190,38); $btnGo.Location=New-Object System.Drawing.Point(($CW-20-190),80); $footer.Controls.Add($btnGo)
 $btnDetect=New-StyledButton "Rileva bloccate" $false; $btnDetect.Size=New-Object System.Drawing.Size(150,38); $btnDetect.Location=New-Object System.Drawing.Point(($btnGo.Left-10-150),80); $footer.Controls.Add($btnDetect)
 
 # ---- Area centrale scrollabile con gruppi ----
