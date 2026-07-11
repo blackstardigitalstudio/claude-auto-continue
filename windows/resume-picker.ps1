@@ -22,7 +22,7 @@
 =============================================================================
 #>
 [CmdletBinding()]
-param([switch]$ListOnly, [string]$Message='Continua')
+param([switch]$ListOnly, [string]$Message='Riprendi da dove eri rimasto. Prima riassumi in una riga cosa era in corso e cosa manca, poi prosegui.')
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -146,11 +146,21 @@ function Resume-One($group,$title){
     [void](Click-Tab $win $group); Start-Sleep -Milliseconds 900; $win=Get-ClaudeWindow
     if(Open-SessionByTitle $win $title){
         Start-Sleep -Milliseconds 1500; $win=Get-ClaudeWindow
-        # 1) se c'e' il pulsante nativo di ripresa, clicca quello (modo pulito)
+        # 1) se c'e' il pulsante nativo di ripresa, clicca quello (modo pulito).
+        #    Cliccarlo e' sicuro: se i crediti non sono tornati l'app ri-mostra solo
+        #    il limite, nessun turno sprecato.
         $btn=Find-ResumeButton $win
         if($btn){ if(Invoke-Element $btn){ Start-Sleep -Seconds 2; return $true } }
-        # 2) altrimenti invia un messaggio ("Continua") per riattivare la conversazione
-        if(Send-ContinueMessage $win $Message){ Start-Sleep -Seconds 1; return $true }
+        # 2) altrimenti invia un messaggio per riattivare la conversazione (Claude Code).
+        #    Ma prima verifica che la quota sia DAVVERO tornata: inviare consuma un
+        #    turno, quindi se il limite e' ancora attivo aspettiamo e ricontrolliamo
+        #    invece di sprecarlo (resume non cieco).
+        if(Confirm-CreditsBack $win){
+            $win=Get-ClaudeWindow
+            if(Send-ContinueMessage $win $Message){ Start-Sleep -Seconds 1; return $true }
+        } else {
+            Write-Output ("Salto '{0}': limite ancora attivo, non invio a vuoto." -f $title)
+        }
     }
     return $false
 }
@@ -191,6 +201,30 @@ function Wait-UntilResetPlus30($win){
     $wait=[int]($target-$now).TotalSeconds
     Toast "Claude: aspetto il reset" ("Riprendo alle {0} (30s dopo i crediti). Non chiudere." -f $target.ToString('HH:mm:ss'))
     Start-Sleep -Seconds $wait
+}
+
+# Il limite e' ANCORA attivo? Segnali: c'e' un pulsante nativo di ripresa,
+# oppure la finestra mostra ancora il banner del limite ("limite di utilizzo",
+# "si ripristina alle ...", "usage limit", "resets at ...").
+function Test-LimitActive($win){
+    if(-not $win){ return $false }
+    if(Find-ResumeButton $win){ return $true }
+    $t=Get-WindowText $win
+    return [bool]([regex]::IsMatch($t,'(?i)limite di utilizzo|usage limit|si (?:ripristina|azzera|reimposta)|resets? at'))
+}
+# Verifica che la quota sia DAVVERO tornata prima di inviare un messaggio.
+# Inviare consuma un turno: se il limite e' ancora attivo NON inviamo a vuoto,
+# ma ri-controlliamo per qualche minuto e agiamo solo quando i crediti sono tornati
+# (feedback community su #35744: "resume shouldn't be blind" / "re-check that the
+# quota actually reset before continuing, and re-arm and wait if it hasn't").
+function Confirm-CreditsBack($win){
+    if(-not (Test-LimitActive $win)){ return $true }
+    $deadline=(Get-Date).AddMinutes(6)
+    while((Get-Date) -lt $deadline){
+        Start-Sleep -Seconds 25
+        if(-not (Test-LimitActive (Get-ClaudeWindow))){ return $true }
+    }
+    return $false
 }
 
 # "Offrimi un caffe'": MASSIMO UNA VOLTA AL GIORNO (niente spam), disattivabile.
