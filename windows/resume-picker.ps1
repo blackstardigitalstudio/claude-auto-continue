@@ -22,7 +22,8 @@
 =============================================================================
 #>
 [CmdletBinding()]
-param([switch]$ListOnly, [string]$Message='Riprendi da dove eri rimasto. Prima riassumi in una riga cosa era in corso e cosa manca, poi prosegui.')
+# -Message vuoto = automatico: sceglie il testo nella lingua dell'app (IT/EN).
+param([switch]$ListOnly, [string]$Message='')
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -212,6 +213,22 @@ function Send-ContinueMessage($win,$text){
     try{ [System.Windows.Forms.SendKeys]::SendWait("{ENTER}") }catch{}
     Start-Sleep -Milliseconds 800
     return $true
+}
+
+# Messaggio di ripresa NELLA LINGUA dell'app: italiano se l'app e' in italiano,
+# altrimenti inglese. Lingua rilevata dai nomi dei pulsanti noti; in mancanza,
+# dalla lingua di Windows. Cosi' chi usa Claude in inglese riceve il messaggio in inglese.
+function Get-ResumeMessage($win){
+    $it="Riprendi da dove eri rimasto. Prima riassumi in una riga cosa era in corso e cosa manca, poi prosegui."
+    $en="Resume from where you left off. First, in one line, summarize what was in progress and what's missing, then continue."
+    $lang='en'
+    try{
+        $joined=((Collect-SidebarButtons $win) -join ' | ').ToLower()
+        if($joined -match 'altre opzioni per|nuova sessione|attività rapida|attivita rapida'){ $lang='it' }
+        elseif($joined -match 'more options for|new session|quick task'){ $lang='en' }
+        elseif((Get-UICulture).TwoLetterISOLanguageName -eq 'it'){ $lang='it' }
+    }catch{ try{ if((Get-UICulture).TwoLetterISOLanguageName -eq 'it'){ $lang='it' } }catch{} }
+    if($lang -eq 'it'){ return $it } else { return $en }
 }
 
 function Resume-One($group,$title){
@@ -464,6 +481,10 @@ if($chkRemember.Checked){
 } elseif(Test-Path $PrefFile){ Remove-Item $PrefFile -Force }
 
 if($chosen.Count -eq 0){ Toast "Nessuna selezione" "Non hai selezionato sessioni da riprendere."; return }
+
+# Messaggio di ripresa: se non forzato via -Message, scegli automaticamente la
+# lingua dell'app (italiano per te, inglese per chi usa Claude in inglese).
+if(-not $Message){ $Message = Get-ResumeMessage (Get-ClaudeWindow) }
 
 # Se l'app mostra un'ora di reset futura, aspetta fino a (reset + 30s): non clicca subito.
 Wait-UntilResetPlus30 (Get-ClaudeWindow)
