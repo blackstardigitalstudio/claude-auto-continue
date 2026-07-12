@@ -30,6 +30,16 @@ automatica). Funziona con l'**app desktop di Claude** (Windows e macOS) e con la
 
 </div>
 
+<div align="center">
+
+### 🎬 Prova reale (registrazione vera, solo sottotitoli aggiunti)
+
+I crediti erano finiti, **non ho toccato nulla**: al reset **claude-ac ha premuto "Riprova" da solo** e la chat è ripartita.
+
+▶️ **[Guarda il video](claude-ac-prova-ripresa.mp4)** — disponibile anche nella [Release](https://github.com/blackstardigitalstudio/claude-auto-continue/releases/latest).
+
+</div>
+
 ---
 
 ## Il problema
