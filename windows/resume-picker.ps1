@@ -115,12 +115,73 @@ function Open-SessionByTitle($win,$title){
     }
     return $false
 }
-# Raccoglie le sessioni dalla barra laterale (lista unica: l'app non ha piu' le
-# schede Chat/Cowork/Code, quindi si legge una volta sola).
+# Raccoglie i nomi dei pulsanti della barra laterale IN ORDINE DI DOCUMENTO
+# (DFS pre-order). Serve a ricostruire i gruppi: nella barra gli header di sezione
+# (Fissato / Non raggruppato / <gruppo-progetto> ...) sono pulsanti che precedono
+# le proprie sessioni.
+function Collect-SidebarButtons($win){
+    $names=New-Object System.Collections.Generic.List[string]
+    if(-not $win){ return $names }
+    $walker=[System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $root=$win
+    try{
+        $nc=New-Object System.Windows.Automation.PropertyCondition($AE::NameProperty,'Barra laterale')
+        $sb=$win.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$nc)
+        if($sb){ $root=$sb }
+    }catch{}
+    $stack=New-Object System.Collections.Generic.Stack[System.Windows.Automation.AutomationElement]
+    $stack.Push($root); $guard=0
+    while($stack.Count -gt 0 -and $guard -lt 6000){
+        $guard++; $el=$stack.Pop()
+        if(-not [object]::ReferenceEquals($el,$root)){
+            try{ if($el.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button){ $n=(''+$el.Current.Name).Trim(); if($n){ [void]$names.Add($n) } } }catch{}
+        }
+        $kids=New-Object System.Collections.Generic.List[System.Windows.Automation.AutomationElement]
+        try{ $ch=$walker.GetFirstChild($el); while($ch -ne $null){ [void]$kids.Add($ch); $ch=$walker.GetNextSibling($ch) } }catch{}
+        for($i=$kids.Count-1;$i -ge 0;$i--){ $stack.Push($kids[$i]) }
+    }
+    return $names
+}
+# Raccoglie le sessioni della barra laterale DIVISE per sezione reale dell'app
+# (l'app non ha piu' le schede Chat/Cowork/Code: la barra e' divisa in Fissato,
+# gruppi-progetto, Non raggruppato, ecc.). Ritorna un dizionario ordinato
+# gruppo -> @(sessioni), saltando i gruppi vuoti.
 function Gather-All {
     $win=Get-ClaudeWindow
+    if(-not $win){ $r=[ordered]@{}; $r.Add('Sessioni',@()); return $r }
+    $flat=@(Get-Sessions $win)
+    $stateOf=@{}; foreach($s in $flat){ $stateOf[$s.Title]=$s.State }
+    $titles=@($flat | ForEach-Object { $_.Title } | Sort-Object { $_.Length } -Descending)
+    # pulsanti di navigazione/controllo da ignorare (non sono ne' header ne' sessioni)
+    $IGNORE='home','code','nuova sessione','attività rapida','artefatti','routine','personalizza','altre voci di navigazione','collapse sidebar','search','filter','menu','indietro','inoltra','ripristina','riduci a icona','chiudi','mode'
+    $names=Collect-SidebarButtons $win
+    # hashtable normale (chiavi stringa) + lista d'ordine: evita l'ambiguita' del
+    # doppio indexer di OrderedDictionary in PowerShell 5.1.
+    $bucket=@{}
+    $order=New-Object System.Collections.Generic.List[string]
+    $seen=@{}
+    $current='Recenti'
+    foreach($n in $names){
+        $low=$n.ToLower()
+        if($low.StartsWith('altre opzioni') -or $low.StartsWith('mostra altri')){ continue }
+        if($IGNORE -contains $low){ continue }
+        $match=$null
+        foreach($t in $titles){ if($t -and $n.EndsWith($t)){ $match=$t; break } }
+        if($match){
+            if($seen.ContainsKey($match)){ continue }
+            $seen[$match]=$true
+            if(-not $bucket.ContainsKey($current)){ $bucket[$current]=New-Object System.Collections.Generic.List[object]; [void]$order.Add($current) }
+            $st=$stateOf[$match]; if(-not $st){$st='-'}
+            [void]$bucket[$current].Add([pscustomobject]@{Title=$match;State=$st})
+        } else {
+            $current=$n   # header di sezione
+        }
+    }
+    # sessioni non collocate dal walk -> gruppo "Altre" (robustezza)
+    foreach($s in $flat){ if(-not $seen.ContainsKey($s.Title)){ if(-not $bucket.ContainsKey('Altre')){ $bucket['Altre']=New-Object System.Collections.Generic.List[object]; [void]$order.Add('Altre') }; [void]$bucket['Altre'].Add($s); $seen[$s.Title]=$true } }
     $res=[ordered]@{}
-    $res['Sessioni']= if($win){ @(Get-Sessions $win) } else { @() }
+    foreach($k in $order){ $res.Add($k, $bucket[$k].ToArray()) }
+    if($res.Count -eq 0){ $res.Add('Sessioni', @($flat)) }
     return $res
 }
 # Trova la casella di input del messaggio (composer) nella chat aperta.
@@ -270,10 +331,11 @@ $win = Get-ClaudeWindow
 if(-not $win){ Toast "Claude non trovato" "L'app desktop Claude non risulta aperta."; return }
 
 $data = Gather-All
-$total = 0; foreach($g in $GROUPS){ $total += $data[$g].Count }
+$groupNames = @($data.Keys)
+$total = 0; foreach($g in $groupNames){ $total += $data[$g].Count }
 
 if($ListOnly){
-    foreach($g in $GROUPS){ Write-Output ("== {0} ({1}) ==" -f $g,$data[$g].Count); foreach($s in $data[$g]){ Write-Output ("   [{0}] {1}" -f $s.State,$s.Title) } }
+    foreach($g in $groupNames){ Write-Output ("== {0} ({1}) ==" -f $g,$data[$g].Count); foreach($s in $data[$g]){ Write-Output ("   [{0}] {1}" -f $s.State,$s.Title) } }
     return
 }
 if($total -eq 0){ Toast "Nessuna sessione" "Non ho trovato sessioni nella barra laterale di Claude."; return }
@@ -350,8 +412,7 @@ $form.Controls.Add($scroll); $scroll.BringToFront()
 
 $checkItems=New-Object System.Collections.Generic.List[object]
 $y=8
-$grpIcons=@{ Chat='Chat'; Cowork='Cowork'; Code='Code' }
-foreach($g in $GROUPS){
+foreach($g in $groupNames){
     $items=$data[$g]
     # intestazione gruppo (card)
     $hd=New-Object System.Windows.Forms.Panel; $hd.Size=New-Object System.Drawing.Size(536,30); $hd.Location=New-Object System.Drawing.Point(8,$y); $hd.BackColor=$C_PANEL
