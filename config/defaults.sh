@@ -13,7 +13,7 @@ _CLAUDE_AC_DEFAULTS_LOADED=1
 # NB: NON usare `readonly` qui. Renderebbe impossibile sovrascrivere questi
 # valori dal config utente sottostante (causando un errore fatale) e romperebbe
 # i test che fanno il source del file.
-CLAUDE_AC_VERSION="1.7.0"
+CLAUDE_AC_VERSION="1.7.1"
 
 # Secondi tra un tentativo e l'altro.
 # Claude.ai Pro si resetta ~ogni 5 ore; i rate limit API si liberano in minuti.

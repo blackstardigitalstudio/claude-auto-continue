@@ -34,8 +34,8 @@ $AE = [System.Windows.Automation.AutomationElement]
 
 $SAFE_RESUME = @('continua a lavorare','continua il lavoro','riprova','riprendi','continue working','continue')
 $NEVER_CLICK = @('acquist','passa a max','aggiorna il tuo piano','upgrade','paga','purchase','buy','piano')
-$SESSION_STATE_RX = '^(In esecuzione|Inattivo|In pausa|In coda|Pronto|Completato|Annullato|Errore|Running|Idle|Paused|Queued|Ready|Completed|Cancelled|Error)\s+(.+)$'
-$GROUPS = @('Chat','Cowork','Code')
+$SESSION_STATE_RX = '^(In esecuzione|In attesa di input|In attesa|Inattivo|In pausa|In coda|Pronto|Completato|Annullato|Errore|Running|Waiting for input|Waiting|Idle|Paused|Queued|Ready|Completed|Cancelled|Error)\s+(.+)$'
+$GROUPS = @('Sessioni')
 $PrefFile = Join-Path $env:LOCALAPPDATA 'claude-ac\preferred-sessions.txt'
 
 # --- Palette -----------------------------------------------------------------
@@ -81,15 +81,30 @@ function Find-ResumeButton($win){
     }
     return $null
 }
+# Enumera TUTTE le sessioni della barra laterale in modo affidabile: ogni sessione
+# ha un pulsante gemello "Altre opzioni per <titolo>", da cui ricaviamo il titolo
+# pulito (a prescindere dallo stato o dai raggruppamenti). Lo stato, se presente,
+# lo leggiamo dal pulsante che apre la sessione (il cui nome inizia con lo stato).
 function Get-Sessions($win){
-    $seen=@{}; $out=@()
+    if(-not $win){ return @() }
     $c=New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)
-    foreach($b in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants,$c)){
-        $n=(''+$b.Current.Name).Trim(); if(-not $n){continue}; if($n -like 'Altre opzioni*'){continue}
-        $m=[regex]::Match($n,$SESSION_STATE_RX)
-        if($m.Success){ $state=$m.Groups[1].Value; $title=$m.Groups[2].Value.Trim()
-            if($title -and -not $seen.ContainsKey($title)){ $seen[$title]=$true; $out += [pscustomobject]@{Title=$title;State=$state} } }
+    $btns=@($win.FindAll([System.Windows.Automation.TreeScope]::Descendants,$c))
+    $order=New-Object System.Collections.Generic.List[string]
+    $state=@{}
+    # 1) titoli dai pulsanti "Altre opzioni per <titolo>"
+    foreach($b in $btns){
+        $n=(''+$b.Current.Name).Trim(); if(-not $n){continue}
+        $m=[regex]::Match($n,'^Altre opzioni per (.+)$')
+        if($m.Success){ $t=$m.Groups[1].Value.Trim(); if($t -and -not $state.ContainsKey($t)){ $state[$t]=''; [void]$order.Add($t) } }
     }
+    # 2) stato (dal pulsante che apre la sessione, se inizia con uno stato noto)
+    foreach($b in $btns){
+        $n=(''+$b.Current.Name).Trim(); if(-not $n){continue}; if($n -like 'Altre opzioni*'){continue}
+        $ms=[regex]::Match($n,$SESSION_STATE_RX)
+        if($ms.Success){ $st=$ms.Groups[1].Value; $tt=$ms.Groups[2].Value.Trim(); if($state.ContainsKey($tt) -and -not $state[$tt]){ $state[$tt]=$st } }
+    }
+    $out=@()
+    foreach($t in $order){ $s=$state[$t]; if(-not $s){$s='-'}; $out += [pscustomobject]@{Title=$t;State=$s} }
     return $out
 }
 function Open-SessionByTitle($win,$title){
@@ -100,15 +115,12 @@ function Open-SessionByTitle($win,$title){
     }
     return $false
 }
-# Raccoglie le sessioni da tutte le schede (Chat/Cowork/Code)
+# Raccoglie le sessioni dalla barra laterale (lista unica: l'app non ha piu' le
+# schede Chat/Cowork/Code, quindi si legge una volta sola).
 function Gather-All {
+    $win=Get-ClaudeWindow
     $res=[ordered]@{}
-    foreach($g in $GROUPS){
-        $win=Get-ClaudeWindow; if(-not $win){ $res[$g]=@(); continue }
-        [void](Click-Tab $win $g); Start-Sleep -Milliseconds 1200
-        $win=Get-ClaudeWindow
-        $res[$g]= if($win){ @(Get-Sessions $win) } else { @() }
-    }
+    $res['Sessioni']= if($win){ @(Get-Sessions $win) } else { @() }
     return $res
 }
 # Trova la casella di input del messaggio (composer) nella chat aperta.
@@ -143,7 +155,6 @@ function Send-ContinueMessage($win,$text){
 
 function Resume-One($group,$title){
     $win=Get-ClaudeWindow; if(-not $win){return $false}
-    [void](Click-Tab $win $group); Start-Sleep -Milliseconds 900; $win=Get-ClaudeWindow
     if(Open-SessionByTitle $win $title){
         Start-Sleep -Milliseconds 1500; $win=Get-ClaudeWindow
         # 1) se c'e' il pulsante nativo di ripresa, clicca quello (modo pulito).
@@ -166,7 +177,6 @@ function Resume-One($group,$title){
 }
 function Test-Blocked($group,$title){
     $win=Get-ClaudeWindow; if(-not $win){return $false}
-    [void](Click-Tab $win $group); Start-Sleep -Milliseconds 900; $win=Get-ClaudeWindow
     if(Open-SessionByTitle $win $title){ Start-Sleep -Milliseconds 1200; $win=Get-ClaudeWindow; return [bool](Find-ResumeButton $win) }
     return $false
 }
@@ -266,7 +276,7 @@ if($ListOnly){
     foreach($g in $GROUPS){ Write-Output ("== {0} ({1}) ==" -f $g,$data[$g].Count); foreach($s in $data[$g]){ Write-Output ("   [{0}] {1}" -f $s.State,$s.Title) } }
     return
 }
-if($total -eq 0){ Toast "Nessuna sessione" "Non ho trovato sessioni nelle schede Chat/Cowork/Code."; return }
+if($total -eq 0){ Toast "Nessuna sessione" "Non ho trovato sessioni nella barra laterale di Claude."; return }
 
 # selezione ricordata (righe "Group|Title")
 $remembered=@{}
@@ -363,7 +373,7 @@ foreach($g in $GROUPS){
     }
     $y+=6
 }
-$status.Text=("{0} sessioni trovate in Chat/Cowork/Code." -f $total)
+$status.Text=("{0} sessioni trovate." -f $total)
 
 # ---- handlers ----
 $btnAll.Add_Click({ foreach($it in $checkItems){ $it.Cb.Checked=$true } })
