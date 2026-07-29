@@ -420,59 +420,103 @@ $bar1=New-Object System.Windows.Forms.Panel; $bar1.Size=New-Object System.Drawin
 $bar2=New-Object System.Windows.Forms.Panel; $bar2.Size=New-Object System.Drawing.Size(9,14); $bar2.Location=New-Object System.Drawing.Point(16,0); $bar2.BackColor=$C_RED; $flag.Controls.Add($bar2)
 
 $btnGo=New-StyledButton "Continua selezionate" $true; $btnGo.Size=New-Object System.Drawing.Size(190,38); $btnGo.Location=New-Object System.Drawing.Point(($CW-20-190),80); $footer.Controls.Add($btnGo)
-$btnDetect=New-StyledButton "Rileva bloccate" $false; $btnDetect.Size=New-Object System.Drawing.Size(150,38); $btnDetect.Location=New-Object System.Drawing.Point(($btnGo.Left-10-150),80); $footer.Controls.Add($btnDetect)
+$btnDetect=New-StyledButton "Ricontrolla bloccate" $false; $btnDetect.Size=New-Object System.Drawing.Size(160,38); $btnDetect.Location=New-Object System.Drawing.Point(($btnGo.Left-10-160),80); $footer.Controls.Add($btnDetect)
 
-# ---- Area centrale scrollabile con gruppi ----
+# ---- Modello: una voce per sessione (stato bloccata/selezionata persistente) ----
+$model=New-Object System.Collections.Generic.List[object]
+foreach($g in $groupNames){ foreach($s in $data[$g]){
+    $key=("{0}|{1}" -f $g,$s.Title)
+    $model.Add([pscustomobject]@{ Group=$g; Title=$s.Title; State=$s.State; Blocked=$false; Checked=[bool]($remembered.ContainsKey($key)) }) | Out-Null
+}}
+$script:ShowAll=$false
+$script:DetectMsg="Controllo non ancora eseguito."
+
+# ---- Area centrale scrollabile ----
 $scroll=New-Object System.Windows.Forms.Panel
 $scroll.Dock="Fill"; $scroll.AutoScroll=$true; $scroll.BackColor=$C_PANEL; $scroll.Padding=New-Object System.Windows.Forms.Padding(16,12,16,12)
 $form.Controls.Add($scroll); $scroll.BringToFront()
 
-$checkItems=New-Object System.Collections.Generic.List[object]
-$y=8
-foreach($g in $groupNames){
-    $items=$data[$g]
-    # intestazione gruppo (card)
-    $hd=New-Object System.Windows.Forms.Panel; $hd.Size=New-Object System.Drawing.Size(536,30); $hd.Location=New-Object System.Drawing.Point(8,$y); $hd.BackColor=$C_PANEL
-    $bar=New-Object System.Windows.Forms.Panel; $bar.Size=New-Object System.Drawing.Size(4,20); $bar.Location=New-Object System.Drawing.Point(0,5); $bar.BackColor=$C_ACCENT; $hd.Controls.Add($bar)
-    $hl=New-Object System.Windows.Forms.Label; $hl.Text=("{0}   ({1})" -f $g,$items.Count); $hl.Font=$F_GROUP; $hl.ForeColor=$C_TEXT; $hl.AutoSize=$true; $hl.Location=New-Object System.Drawing.Point(14,4); $hd.Controls.Add($hl)
-    $scroll.Controls.Add($hd); $y+=34
-    if($items.Count -eq 0){
-        $em=New-Object System.Windows.Forms.Label; $em.Text="   (nessuna sessione in questa sezione)"; $em.ForeColor=$C_MUTED; $em.AutoSize=$true; $em.Location=New-Object System.Drawing.Point(18,$y); $scroll.Controls.Add($em); $y+=28; continue
-    }
-    foreach($s in $items){
-        $card=New-Object System.Windows.Forms.Panel; $card.Size=New-Object System.Drawing.Size(552,38); $card.Location=New-Object System.Drawing.Point(8,$y); $card.BackColor=$C_CARD
-        $cb=New-Object System.Windows.Forms.CheckBox; $cb.AutoSize=$false; $cb.AutoEllipsis=$true; $cb.Size=New-Object System.Drawing.Size(396,20); $cb.Location=New-Object System.Drawing.Point(12,9)
-        $cb.Text=$s.Title; $cb.Font=$F_ITEM; $cb.ForeColor=$C_TEXT
-        $key=("{0}|{1}" -f $g,$s.Title); if($remembered.ContainsKey($key)){ $cb.Checked=$true }
-        $st=New-Object System.Windows.Forms.Label; $st.Text=$s.State; $st.AutoSize=$false; $st.Size=New-Object System.Drawing.Size(120,20); $st.TextAlign="MiddleRight"; $st.Font=$F_SUB; $st.ForeColor=$C_MUTED; $st.Location=New-Object System.Drawing.Point(420,9)
-        $card.Controls.Add($cb); $card.Controls.Add($st); $scroll.Controls.Add($card)
-        $checkItems.Add([pscustomobject]@{ Cb=$cb; Group=$g; Title=$s.Title }) | Out-Null
-        $y+=42
-    }
-    $y+=6
+# Card di una sessione (checkbox + stato). Barretta rossa se bloccata.
+function New-SessionCard($m,$isBlocked){
+    $card=New-Object System.Windows.Forms.Panel; $card.Size=New-Object System.Drawing.Size(552,38); $card.BackColor=$C_CARD
+    $bar=New-Object System.Windows.Forms.Panel; $bar.Size=New-Object System.Drawing.Size(4,38); $bar.Location=New-Object System.Drawing.Point(0,0)
+    $bar.BackColor= if($isBlocked){$C_RED}else{[System.Drawing.Color]::FromArgb(225,228,233)}; $card.Controls.Add($bar)
+    $cb=New-Object System.Windows.Forms.CheckBox; $cb.AutoSize=$false; $cb.AutoEllipsis=$true; $cb.Size=New-Object System.Drawing.Size(388,20); $cb.Location=New-Object System.Drawing.Point(14,9)
+    $cb.Text=$m.Title; $cb.Font=$F_ITEM; $cb.ForeColor=$C_TEXT; $cb.Checked=[bool]$m.Checked; $cb.Tag=$m
+    $cb.Add_CheckedChanged({ $this.Tag.Checked=$this.Checked })
+    $card.Controls.Add($cb)
+    $st=New-Object System.Windows.Forms.Label; $st.AutoSize=$false; $st.Size=New-Object System.Drawing.Size(120,20); $st.TextAlign="MiddleRight"; $st.Font=$F_SUB; $st.Location=New-Object System.Drawing.Point(420,9)
+    if($isBlocked){ $st.Text="BLOCCATA"; $st.ForeColor=$C_RED } else { $st.Text=$m.State; $st.ForeColor=$C_MUTED }
+    $card.Controls.Add($st)
+    return $card
 }
-$status.Text=("{0} sessioni trovate." -f $total)
+
+# Disegna: in cima le BLOCCATE, poi un toggle "Mostra tutte le sessioni".
+function Render {
+    $scroll.SuspendLayout(); $scroll.Controls.Clear(); $y=8
+    $blocked=@($model | Where-Object { $_.Blocked })
+    $hd=New-Object System.Windows.Forms.Panel; $hd.Size=New-Object System.Drawing.Size(536,30); $hd.Location=New-Object System.Drawing.Point(8,$y); $hd.BackColor=$C_PANEL
+    $b=New-Object System.Windows.Forms.Panel; $b.Size=New-Object System.Drawing.Size(4,20); $b.Location=New-Object System.Drawing.Point(0,5); $b.BackColor=$C_RED; $hd.Controls.Add($b)
+    $hl=New-Object System.Windows.Forms.Label; $hl.Text=("Bloccate dal limite   ({0})" -f $blocked.Count); $hl.Font=$F_GROUP; $hl.ForeColor=$C_TEXT; $hl.AutoSize=$true; $hl.Location=New-Object System.Drawing.Point(14,4); $hd.Controls.Add($hl)
+    $scroll.Controls.Add($hd); $y+=34
+    if($blocked.Count -eq 0){
+        $em=New-Object System.Windows.Forms.Label; $em.Text=("   "+$script:DetectMsg); $em.ForeColor=$C_MUTED; $em.AutoSize=$true; $em.Location=New-Object System.Drawing.Point(18,$y); $scroll.Controls.Add($em); $y+=30
+    } else {
+        foreach($m in $blocked){ $c=New-SessionCard $m $true; $c.Location=New-Object System.Drawing.Point(8,$y); $scroll.Controls.Add($c); $y+=42 }
+        $y+=6
+    }
+    # toggle "mostra tutte"
+    $rest=@($model | Where-Object { -not $_.Blocked })
+    $tg=New-Object System.Windows.Forms.Button; $tg.FlatStyle="Flat"; $tg.FlatAppearance.BorderSize=0; $tg.Cursor="Hand"; $tg.Font=$F_BTN
+    $tg.BackColor=[System.Drawing.Color]::FromArgb(238,240,243); $tg.ForeColor=$C_TEXT; $tg.TextAlign="MiddleLeft"; $tg.Padding=New-Object System.Windows.Forms.Padding(10,0,0,0)
+    $tg.Size=New-Object System.Drawing.Size(320,34); $tg.Location=New-Object System.Drawing.Point(8,$y)
+    $tg.Text= if($script:ShowAll){ "-   Nascondi le altre sessioni" } else { ("+   Mostra tutte le sessioni   ({0})" -f $rest.Count) }
+    $tg.Add_Click({ $script:ShowAll = -not $script:ShowAll; Render })
+    $scroll.Controls.Add($tg); $y+=44
+    if($script:ShowAll){
+        foreach($g in $groupNames){
+            $items=@($model | Where-Object { $_.Group -eq $g -and -not $_.Blocked })
+            if($items.Count -eq 0){ continue }
+            $gh=New-Object System.Windows.Forms.Panel; $gh.Size=New-Object System.Drawing.Size(536,28); $gh.Location=New-Object System.Drawing.Point(8,$y); $gh.BackColor=$C_PANEL
+            $gb=New-Object System.Windows.Forms.Panel; $gb.Size=New-Object System.Drawing.Size(4,18); $gb.Location=New-Object System.Drawing.Point(0,5); $gb.BackColor=$C_ACCENT; $gh.Controls.Add($gb)
+            $gl=New-Object System.Windows.Forms.Label; $gl.Text=("{0}   ({1})" -f $g,$items.Count); $gl.Font=$F_GROUP; $gl.ForeColor=$C_TEXT; $gl.AutoSize=$true; $gl.Location=New-Object System.Drawing.Point(14,3); $gh.Controls.Add($gl)
+            $scroll.Controls.Add($gh); $y+=32
+            foreach($m in $items){ $c=New-SessionCard $m $false; $c.Location=New-Object System.Drawing.Point(8,$y); $scroll.Controls.Add($c); $y+=42 }
+            $y+=6
+        }
+    }
+    $scroll.ResumeLayout()
+}
+
+# Trova le sessioni bloccate. Controlla solo le poche sessioni "in corso / in
+# attesa" (le uniche che possono essere ferme al limite), aprendole e cercando il
+# PULSANTE nativo di ripresa (segnale affidabile: non si basa sul testo della chat,
+# che potrebbe contenere le parole "limite di utilizzo" senza essere un vero blocco).
+function Auto-DetectBlocked {
+    try{
+        $cand=@($model | Where-Object { $_.State -match '(?i)^(In esecuzione|In attesa|Running|Waiting)' })
+        if($cand.Count -eq 0){ $script:DetectMsg="Nessuna sessione in corso da controllare."; return }
+        $i=0
+        foreach($m in $cand){ $i++; $status.Text=("Controllo bloccate... {0}/{1}" -f $i,$cand.Count); $form.Refresh()
+            try{ if(Test-Blocked $m.Group $m.Title){ $m.Blocked=$true; $m.Checked=$true } }catch{} }
+        $nb=@($model|Where-Object{$_.Blocked}).Count
+        $script:DetectMsg= if($nb -gt 0){ ("{0} bloccate dal limite (gia' spuntate)." -f $nb) } else { "Nessuna sessione risulta bloccata adesso." }
+    } catch { $script:DetectMsg="Controllo bloccate non riuscito." }
+}
 
 # ---- handlers ----
-$btnAll.Add_Click({ foreach($it in $checkItems){ $it.Cb.Checked=$true } })
-$btnNone.Add_Click({ foreach($it in $checkItems){ $it.Cb.Checked=$false } })
-$btnDetect.Add_Click({
-    $status.Text="Controllo in corso... apro le sessioni una a una."; $form.Refresh()
-    $i=0
-    foreach($it in $checkItems){ $i++
-        try{ $it.Cb.Checked=(Test-Blocked $it.Group $it.Title) }catch{}
-        $status.Text=("Controllo... {0}/{1}" -f $i,$checkItems.Count); $form.Refresh()
-    }
-    $n=0; foreach($it in $checkItems){ if($it.Cb.Checked){$n++} }
-    $status.Text=("Trovate {0} sessioni bloccate (gia' spuntate)." -f $n)
-})
+$btnAll.Add_Click({ foreach($m in $model){ $m.Checked=$true }; Render })
+$btnNone.Add_Click({ foreach($m in $model){ $m.Checked=$false }; Render })
+$btnDetect.Add_Click({ $status.Text="Controllo in corso..."; $form.Refresh(); Auto-DetectBlocked; Render; $status.Text=$script:DetectMsg })
+$form.Add_Shown({ $status.Text="Controllo le sessioni bloccate..."; $form.Refresh(); Auto-DetectBlocked; Render; $status.Text=("{0}   |   {1} sessioni in tutto." -f $script:DetectMsg,$total) })
+Render
 $btnGo.Add_Click({ $form.Tag="GO"; $form.Close() })
 
 [void]$form.ShowDialog()
 if($form.Tag -ne "GO"){ return }
 
-# selezione
-$chosen=@(); foreach($it in $checkItems){ if($it.Cb.Checked){ $chosen += [pscustomobject]@{Group=$it.Group;Title=$it.Title} } }
+# selezione (dal modello)
+$chosen=@(); foreach($m in $model){ if($m.Checked){ $chosen += [pscustomobject]@{Group=$m.Group;Title=$m.Title} } }
 
 # memoria
 if($chkRemember.Checked){
